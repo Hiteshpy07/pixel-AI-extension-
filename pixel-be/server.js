@@ -11,7 +11,7 @@ app.use(express.json({ limit: '50mb' }));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// --- ANALYZE SCREENSHOT ---
+
 app.post('/analyze', async (req, res) => {
   try {
     const { image } = req.body;
@@ -32,7 +32,7 @@ app.post('/analyze', async (req, res) => {
   }
 });
 
-// --- FOLLOW-UP CHAT ---
+
 app.post('/chat', async (req, res) => {
   try {
     const { history, message, analysis } = req.body;
@@ -43,8 +43,6 @@ app.post('/chat', async (req, res) => {
       systemInstruction: `You are Pixel, a helpful AI assistant. You already analyzed a screenshot and this was your finding: "${analysis}". Answer follow-up questions based on this context.`,
     });
 
-    // Gemini requires history to start with 'user' role
-    // Only pass history entries after the first user message
     const validHistory = [];
     let foundUser = false;
     for (const msg of history) {
