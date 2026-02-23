@@ -1,4 +1,4 @@
 [build]
   base = "pixel-fe"
   command = "npm run build"
-  publish = "pixel-fe/dist"
+  publish = "dist"
