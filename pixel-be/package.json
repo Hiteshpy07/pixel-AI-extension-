@@ -7,7 +7,9 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "uvicorn main:app --port 5001 --reload",
+    "start": "python main.py"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

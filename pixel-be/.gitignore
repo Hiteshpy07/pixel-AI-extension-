@@ -2,6 +2,8 @@
 .env
 .env.*
 *.env
+main.py
+test_compare.py
 
 # Python
 .venv/
