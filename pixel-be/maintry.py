@@ -1,3 +1,4 @@
+from email import message
 import os
 import base64
 import easyocr
@@ -30,8 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class Screenshot(BaseModel):
-    image: str    
+class Input(BaseModel):
+    image: str 
+    prompt:str
 
 @app.get("/")
 def root():
@@ -39,29 +41,41 @@ def root():
 
 # --- METHOD 1: EasyOCR ---
 @app.post("/ocr-img")
-def ocrmypic(data: Screenshot):
+def ocrmypic(data: Input):
     base64_str = data.image.split(",")[-1]
     image_bytes = base64.b64decode(base64_str)
     lines = reader.readtext(image_bytes, detail=0)
     full_text = "\n".join(lines)
+
+    message=HumanMessage(
+        content=[
+            {"type":"text","text":"You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code:, also attched the propt entered bny the end user , suggest the ways to solve it or adive as a senior softwatre engineer "},
+            {"type":"text" ,"text":full_text},
+            {"type": "text", "text": data.prompt}
+        ]
+    )
+
+    response = llm.invoke([message])
     return {
         "method": "EasyOCR",
         "extracted_lines": lines,
-        "text": full_text
+        "text": response.content
     }
+
 
 # --- METHOD 2: Gemini Vision with LangChain ---
 @app.post("/base64-img-converstion")
-async def base64mypic(data: Screenshot):
+async def base64mypic(data: Input):
     base64_str = data.image.split(",")[-1]
 
     message = HumanMessage(
         content=[
-            {"type": "text", "text": "You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code:"},
+            {"type": "text", "text": "You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code:, also attched the propt entered bny the end user , suggest the ways to solve it or adive as a senior softwatre engineer "},
             {
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{base64_str}"}
-            }
+            },
+            {"type": "text", "text": data.prompt}
         ]
     )
     
@@ -70,3 +84,4 @@ async def base64mypic(data: Screenshot):
         "method": "Gemini Vision (LangChain)",
         "text": response.content
     }
+
