@@ -1,270 +1,131 @@
-import React, { useState, useEffect } from "react";
-import Header from "./components/Header";
-import ImageDropzone from "./components/ImageDropzone";
-import ResultView from "./components/ResultView";
-import ChatDrawer from "./components/ChatDrawer";
-import DraggableAvatar from "./DraggableAvatar";
-import SelectionOverlay from "./SelectionOverlay";
-import { Sparkles, Terminal, Cpu, MessageSquare, Send, RefreshCw, Zap } from "lucide-react";
+import React, { useState } from "react";
+import FloatingPixelAssistant from "./components/FloatingPixelAssistant";
+import { Sparkles, Terminal, Code2, Globe, Laptop, ArrowUpRight } from "lucide-react";
 
 export default function App() {
-  const [activeMode, setActiveMode] = useState("vision"); // "vision" | "code" | "ocr"
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [resultText, setResultText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(false);
-  const [backendStatus, setBackendStatus] = useState(false);
-  
-  // Follow-up Chat State
-  const [activeTab, setActiveTab] = useState("result"); // "result" | "chat"
-  const [chatMessages, setChatMessages] = useState([]);
-  const [isChatLoading, setIsChatLoading] = useState(false);
-
-  // Check backend health periodically
-  useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const res = await fetch("http://localhost:5001/health");
-        setBackendStatus(res.ok);
-      } catch (err) {
-        setBackendStatus(false);
-      }
-    };
-    checkHealth();
-    const interval = setInterval(checkHealth, 8000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleTriggerAnalysis = async (customPromptOverride = null) => {
-    if (!selectedImage) return;
-
-    setIsLoading(true);
-    setIsStreaming(true);
-    setResultText("");
-    setActiveTab("result");
-
-    const promptToSend = customPromptOverride || customPrompt || (
-      activeMode === "code"
-        ? "Convert this screenshot design/code into clean React + Tailwind CSS code."
-        : activeMode === "ocr"
-        ? "Extract all text verbatim."
-        : "Analyze this screenshot in detail. If code or errors are visible, explain what it does and how to fix it."
-    );
-
-    try {
-      if (activeMode === "ocr") {
-        // Direct EasyOCR call
-        const response = await fetch("http://localhost:5001/ocr", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: selectedImage, with_ai_summary: true }),
-        });
-        const data = await response.json();
-        const output = data.summary 
-          ? `### 📝 Extracted Text (EasyOCR):\n\n${data.text}\n\n---\n### 🤖 AI Summary:\n${data.summary}`
-          : data.text;
-        setResultText(output);
-        setChatMessages([{ role: "model", text: output }]);
-      } else {
-        // Streaming Gemini Vision call
-        const response = await fetch("http://localhost:5001/stream-analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: selectedImage,
-            prompt: promptToSend,
-            mode: activeMode,
-          }),
-        });
-
-        if (!response.body) throw new Error("No stream body");
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let accumulated = "";
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          accumulated += chunk;
-          setResultText(accumulated);
-        }
-
-        setChatMessages([{ role: "model", text: accumulated }]);
-      }
-    } catch (error) {
-      console.error("Analysis failed:", error);
-      setResultText("⚠️ Failed to reach backend server. Please make sure backend is running on port 5001.");
-    } finally {
-      setIsLoading(false);
-      setIsStreaming(false);
-    }
-  };
-
-  const handleFollowUpFromChips = (promptText) => {
-    setActiveTab("chat");
-    setChatMessages((prev) => [...prev, { role: "user", text: promptText }]);
-    handleSendFollowUp(promptText);
-  };
-
-  const handleSendFollowUp = async (userMessage) => {
-    setIsChatLoading(true);
-    try {
-      const response = await fetch("http://localhost:5001/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          history: chatMessages,
-          message: userMessage,
-          analysis: resultText,
-        }),
-      });
-      const data = await response.json();
-      setChatMessages((prev) => [...prev, { role: "model", text: data.text }]);
-    } catch (err) {
-      setChatMessages((prev) => [...prev, { role: "model", text: "Failed to fetch response." }]);
-    } finally {
-      setIsChatLoading(false);
-    }
-  };
-
-  const handleScreenshotCrop = (rawBase64) => {
-    setSelectedImage(`data:image/png;base64,${rawBase64}`);
-    setShowOverlay(false);
-  };
+  const [demoPage, setDemoPage] = useState("code"); // "code" | "web"
 
   return (
-    <div className="min-h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200">
-      {/* Top Navigation */}
-      <Header
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
-        backendStatus={backendStatus}
-      />
-
-      {/* Main Studio Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Image Dropzone & Inputs */}
-        <div className="lg:col-span-5 flex flex-col gap-5">
-          <div className="flex flex-col gap-1.5">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <Zap className="w-4 h-4 text-purple-400" />
-              1. Input Screenshot or Screen Area
-            </h2>
-            <p className="text-xs text-zinc-400">
-              Drag & drop any code image, paste with <kbd className="px-1.5 py-0.5 bg-zinc-900 rounded text-[10px] text-zinc-300 font-mono">Cmd+V</kbd>, or crop your live screen.
-            </p>
+    <div className="min-h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200 relative overflow-hidden">
+      {/* Top Demo Bar (Simulating Browser Tab / Webpage Environment) */}
+      <nav className="w-full bg-zinc-900/60 border-b border-white/5 px-6 py-3 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-red-500/80 inline-block" />
+            <span className="w-3 h-3 rounded-full bg-yellow-500/80 inline-block" />
+            <span className="w-3 h-3 rounded-full bg-emerald-500/80 inline-block" />
           </div>
+          <div className="bg-zinc-950/80 border border-white/10 px-4 py-1 rounded-full text-xs font-mono text-zinc-400 flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-zinc-500" />
+            <span>https://developer.mozilla.org/en-US/docs/Web/JavaScript</span>
+          </div>
+        </div>
 
-          <ImageDropzone
-            selectedImage={selectedImage}
-            setSelectedImage={setSelectedImage}
-            onTriggerCrop={() => setShowOverlay(true)}
-            isLoading={isLoading}
-            onAnalyze={() => handleTriggerAnalysis()}
-            activeMode={activeMode}
-          />
+        {/* Demo Content Toggle */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-400">Simulate Tab:</span>
+          <div className="flex bg-zinc-950 p-1 rounded-xl border border-white/10 text-xs">
+            <button
+              onClick={() => setDemoPage("code")}
+              className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                demoPage === "code" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Code Editor Tab
+            </button>
+            <button
+              onClick={() => setDemoPage("web")}
+              className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                demoPage === "web" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Web Documentation Tab
+            </button>
+          </div>
+        </div>
+      </nav>
 
-          {/* Custom Prompt Input */}
-          {selectedImage && (
-            <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-4 flex flex-col gap-2.5 backdrop-blur-md">
-              <label className="text-xs font-semibold text-zinc-300 flex items-center justify-between">
-                <span>Custom Instruction (Optional):</span>
-                <span className="text-[10px] text-zinc-500 font-normal">Press Enter to Run</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleTriggerAnalysis()}
-                  placeholder={
-                    activeMode === "code"
-                      ? "e.g., Make this navbar responsive with dark mode"
-                      : activeMode === "ocr"
-                      ? "e.g., Only extract terminal commands"
-                      : "e.g., Why is line 4 throwing a TypeError?"
-                  }
-                  className="flex-1 text-xs bg-zinc-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-purple-500 transition-colors placeholder:text-zinc-600"
-                />
-                <button
-                  disabled={isLoading}
-                  onClick={() => handleTriggerAnalysis()}
-                  className="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  Run
-                </button>
+      {/* Simulated Page Content (Shows how Pixel floats on ANY page) */}
+      <div className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-10 flex flex-col gap-6">
+        {demoPage === "code" ? (
+          <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-6 backdrop-blur-md flex flex-col gap-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
+                <Code2 className="w-4 h-4 text-purple-400" />
+                <span>src/services/authService.ts</span>
+              </div>
+              <span className="text-[10px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full border border-red-500/30 font-mono">
+                Error on Line 14: TypeError
+              </span>
+            </div>
+
+            <pre className="font-mono text-xs leading-relaxed text-zinc-300 p-4 bg-zinc-950/80 rounded-xl overflow-x-auto border border-white/5">
+              <code>{`// Example buggy code to test Pixel with:
+import { createClient } from '@supabase/supabase-js';
+
+export async function authenticateUser(token: string) {
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+  // Line 14 - Potential Null Reference
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // Bug: user might be undefined if session is expired
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.app_metadata.role
+  };
+}`}</code>
+            </pre>
+
+            <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-500/20 text-xs text-purple-300 flex items-start gap-3">
+              <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="font-semibold text-purple-200">How to test:</strong> Look at the <strong>bottom-left</strong> of your screen! Click the glowing Pixel avatar (or press <kbd className="px-1.5 py-0.5 bg-zinc-900 rounded font-mono text-white text-[10px]">Alt+S</kbd>), snip this code block, and Pixel will instantly stream the bug explanation and fixed TypeScript code into the popup!
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                Understanding Asynchronous JavaScript & Promises
+              </h1>
+              <p className="text-sm text-zinc-400">
+                A modern guide to event loops, microtasks, and async/await orchestration.
+              </p>
+            </div>
 
-        {/* Right Column: AI Results & Chat View */}
-        <div className="lg:col-span-7 flex flex-col gap-4">
-          {/* Tabs: Result View vs Interactive Chat */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActiveTab("result")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  activeTab === "result"
-                    ? "bg-zinc-800 text-white border border-white/10 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                Analysis & Code
-              </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-2xl bg-zinc-900/50 border border-white/10">
+                <h3 className="text-sm font-bold text-white mb-2">Microtask Queue</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Promises and MutationObserver callbacks run in the microtask queue, which executes immediately after the current script and before the next task or render frame.
+                </p>
+              </div>
+              <div className="p-5 rounded-2xl bg-zinc-900/50 border border-white/10">
+                <h3 className="text-sm font-bold text-white mb-2">Macrotask Queue</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  setTimeout, setInterval, and requestAnimationFrame run in macrotasks. The event loop prioritizes emptying microtasks before picking the next macrotask.
+                </p>
+              </div>
+            </div>
 
-              <button
-                onClick={() => setActiveTab("chat")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  activeTab === "chat"
-                    ? "bg-zinc-800 text-white border border-white/10 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
-                Interactive Chat ({chatMessages.length})
-              </button>
+            <div className="p-4 rounded-xl bg-indigo-950/20 border border-indigo-500/20 text-xs text-indigo-300 flex items-start gap-3">
+              <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="font-semibold text-indigo-200">Try OCR Mode:</strong> Open Pixel in the bottom-left, switch mode to <strong>OCR</strong>, and snip this article. EasyOCR will extract the text verbatim with an AI executive summary!
+              </div>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Tab Content */}
-          {activeTab === "result" ? (
-            <ResultView
-              resultText={resultText}
-              isStreaming={isStreaming}
-              onFollowUp={handleFollowUpFromChips}
-              activeMode={activeMode}
-            />
-          ) : (
-            <ChatDrawer
-              messages={chatMessages}
-              setMessages={setChatMessages}
-              analysis={resultText}
-              isChatLoading={isChatLoading}
-              setIsChatLoading={setIsChatLoading}
-              onClose={() => setActiveTab("result")}
-            />
-          )}
-        </div>
-      </main>
-
-      {/* Floating Screen Grabber Widget */}
-      <DraggableAvatar onScreenshotReceived={setSelectedImage} />
-
-      {/* Area Selection Screen Overlay */}
-      {showOverlay && (
-        <SelectionOverlay
-          onCaptured={() => setShowOverlay(false)}
-          onImageReady={handleScreenshotCrop}
-        />
-      )}
+      {/* THE FLOATING PIXEL ASSISTANT IN BOTTOM-LEFT */}
+      <FloatingPixelAssistant isExtension={false} />
     </div>
   );
 }
