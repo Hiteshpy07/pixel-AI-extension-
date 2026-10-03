@@ -14,11 +14,30 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 load_dotenv()
 
-# Initialize Gemini & EasyOCR Reader
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=os.getenv("GEMINI_API_KEY")
-)
+FALLBACK_MODELS = [
+    "gemini-2.5-flash",    # Primary (Tier 1)
+    "gemini-2.0-flash",    # Backup 1 (Tier 2)
+    "gemini-1.5-flash",    # Backup 2 (Tier 3)
+]
+# can add other models like openai , claude etc.
+
+
+for model in FALLBACK_MODELS:
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
+        print(f"✅ Successfully initialized Gemini with model: {model}")
+        break
+    except Exception as e:
+        print(f"❌ Failed to initialize with {model}: {e}")
+        continue
+
+else:
+    raise RuntimeError("❌ Could not initialize Gemini with any available model. Check your API key and available models.")
+
+
 reader = easyocr.Reader(['en'])
 
 app = FastAPI()
