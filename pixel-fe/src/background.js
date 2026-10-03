@@ -1,5 +1,5 @@
 // Background service worker for Pixel Chrome Extension
-// Handles tab capture and background tasks
+// Handles tab capture, background tasks, and universal injection across all browser tabs
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CAPTURE_TAB') {
@@ -48,33 +48,54 @@ async function handleCapture(tab, cropData, sendResponse) {
   }
 }
 
+// Helper to check if a URL is eligible for content script injection
+function isInjectableUrl(url) {
+  if (!url) return false;
+  return (
+    !url.startsWith('chrome://') &&
+    !url.startsWith('chrome-extension://') &&
+    !url.startsWith('edge://') &&
+    !url.startsWith('about:') &&
+    !url.startsWith('view-source:') &&
+    !url.startsWith('devtools://') &&
+    !url.includes('chromewebstore.google.com')
+  );
+}
+
+// When extension is installed or reloaded, inject into ALL currently open tabs immediately!
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (!tab.id || !isInjectableUrl(tab.url)) continue;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+      } catch (e) {
+        // Tab may have closed or restricted, ignore
+      }
+    }
+  } catch (err) {
+    console.warn('Error during onInstalled broadcast injection:', err);
+  }
+});
+
 // When extension icon is clicked in toolbar, safely notify or inject into tab
 chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab?.id || !tab?.url) return;
-
-  // Ignore restricted browser internal pages
-  if (
-    tab.url.startsWith('chrome://') ||
-    tab.url.startsWith('chrome-extension://') ||
-    tab.url.startsWith('edge://') ||
-    tab.url.startsWith('about:')
-  ) {
-    console.warn('Pixel cannot inject into internal browser page:', tab.url);
-    return;
-  }
+  if (!tab?.id || !isInjectableUrl(tab?.url)) return;
 
   try {
     // Try sending message to existing content script in tab
     await chrome.tabs.sendMessage(tab.id, { type: 'PIXEL_TOGGLE_POPUP' });
   } catch (err) {
-    // If receiving end does not exist (e.g. tab opened before extension loaded),
-    // inject content.js on the fly into the active tab
+    // If not injected yet, inject on the fly and open
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['content.js'],
       });
-      // Allow brief moment for mount then toggle
       setTimeout(() => {
         chrome.tabs.sendMessage(tab.id, { type: 'PIXEL_TOGGLE_POPUP' }).catch(() => {});
       }, 150);
