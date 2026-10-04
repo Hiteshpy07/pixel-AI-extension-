@@ -75,10 +75,16 @@ def ocrmypic(data: Input):
     )
 
     response = llm.invoke([message])
+    tokens = getattr(response, "usage_metadata", None) or {}
     return {
         "method": "EasyOCR",
         "extracted_lines": lines,
-        "text": response.content
+        "text": response.content,
+        "model_tokens": {
+            "input_tokens": tokens.get("input_tokens"),
+            "output_tokens": tokens.get("output_tokens"),
+            "total_tokens": tokens.get("total_tokens")
+        }
     }
 
 
@@ -99,8 +105,14 @@ async def base64mypic(data: Input):
     )
     
     response = await llm.ainvoke([message])
+    tokens = getattr(response, "usage_metadata", None) or {}
     return {
         "method": "Gemini Vision (LangChain)",
-        "text": response.content
+        "text": response.content,
+         "model_tokens": {
+            "input_tokens": tokens.get("input_tokens"),
+            "output_tokens": tokens.get("output_tokens"),
+            "total_tokens": tokens.get("total_tokens")
+        }
     }
 
