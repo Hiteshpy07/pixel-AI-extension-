@@ -10,6 +10,15 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
+# pyrefly: ignore [missing-import]
+from smartroutedetection import is_diagram_image
+
+
+# for smart chocie , ocr or gemini vision 
+# ocr for only text things and gemini for text and images both
+
+
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 load_dotenv()
@@ -60,7 +69,7 @@ def root():
 
 # --- METHOD 1: EasyOCR ---
 @app.post("/ocr-img")
-def ocrmypic(data: Input):
+async def ocrmypic(data: Input):
     base64_str = data.image.split(",")[-1]
     image_bytes = base64.b64decode(base64_str)
     lines = reader.readtext(image_bytes, detail=0)
@@ -74,7 +83,7 @@ def ocrmypic(data: Input):
         ]
     )
 
-    response = llm.invoke([message])
+    response = await llm.ainvoke([message])
     tokens = getattr(response, "usage_metadata", None) or {}
     return {
         "method": "EasyOCR",
@@ -115,4 +124,29 @@ async def base64mypic(data: Input):
             "total_tokens": tokens.get("total_tokens")
         }
     }
+
+
+
+@app.post("/smart-route")
+async def smart_route(data:Input):
+
+    # preprocession of the input image for smart routing 
+    
+    base64_img=data.image.split(",")[-1]
+    image_bytes = base64.b64decode(base64_img)
+
+
+    is_diagram=is_diagram_image(image_bytes)
+    if is_diagram:
+        print("will be using gemini vision as it is a diagrm heavy pic")
+        return {
+            "route_chosen": "🧠 Gemini Vision (Multimodal)",
+            "is_diagram": True}
+    else:
+        print("will be using easyocr as it is a text heavy image") 
+        return {
+            "route_chosen": "⚡ EasyOCR + Text LLM",
+            "is_diagram": False
+        }
+
 
