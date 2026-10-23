@@ -15,38 +15,34 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
-# pyrefly: ignore [missing-import]
 from smartroutedetection import is_diagram_image
-
-# for smart chocie , ocr or gemini vision 
-# ocr for only text things and gemini for text and images both
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
 load_dotenv()
 
-# FALLBACK_MODELS = [
-#     "gemini-2.5-flash",    # Primary (Tier 1)
-#     "gemini-2.0-flash",    # Backup 1 (Tier 2)
-#     "gemini-1.5-flash",    # Backup 2 (Tier 3)
-# ]
+FALLBACK_MODELS = [
+    "gemini-2.5-flash",    # Primary (Tier 1)
+    "gemini-2.0-flash",    # Backup 1 (Tier 2)
+    "gemini-1.5-flash",    # Backup 2 (Tier 3)
+]
 # # can add other models like openai , claude etc.
 
 
-# for model in FALLBACK_MODELS:
-#     try:
-#         llm = ChatGoogleGenerativeAI(
-#             model=model,
-#             google_api_key=os.getenv("GEMINI_API_KEY")
-#         )
-#         print(f"Successfully initialized:{model}")
-#         break
-#     except Exception as e:
-#         print(f" Failed to initialize with {model}: {e}")
-#         continue
+for model in FALLBACK_MODELS:
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
+        print(f"Successfully initialized:{model}")
+        break
+    except Exception as e:
+        print(f" Failed to initialize with {model}: {e}")
+        continue
 
-# else:
-#     raise RuntimeError("check api key s, couldnt load models")
+else:
+    raise RuntimeError("check api key s, couldnt load models")
 
 
 # reader = easyocr.Reader(['en'])
@@ -162,7 +158,7 @@ def root():
 
 
 @app.get("/analyse")
-def analyse(data:Input):
+async def analyse(data:Input):
     print("initialised /analyse route")
     print("got data with prompt: {data.prompt}")
 #need to convert the image to base 64 vth both the ways , ocr and gemini vision
@@ -191,10 +187,12 @@ def analyse(data:Input):
             {"type": "text", "text": data.prompt}
         ]
     )
+        print("callling ai for gemini vision:")
+        response = await llm.ainvoke([message])
 
-
-
-
+        print("received the response from gemini vision:{response}")
+        return {"response":response}
+    
     else:
         print("Diagram not detected,using OCR") 
         #OCR-done by indra_ocr module
@@ -209,7 +207,21 @@ def analyse(data:Input):
 
         #call the AI here , fro the extreacted text and the prompt
 
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "text", 
+                    "text": "You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code, also attached the prompt entered by the end user, suggest the ways to solve it or advise as a senior software engineer."
+                },
+                {"type": "text", "text": data.prompt},
+                {"type": "text", "text": full_text}
+            ]
+        )
+        print("callling ai for OCR:")
+        response = await llm.ainvoke([message])
 
+        print("received the response from OCR:{response}")
+        return {"response":response}
 
 
 
