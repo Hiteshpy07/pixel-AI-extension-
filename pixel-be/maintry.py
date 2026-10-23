@@ -16,6 +16,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
 from smartroutedetection import is_diagram_image
+from hidingsecrets import redact_sensitive_data
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -70,11 +71,11 @@ def root():
 @app.get("/analyse")
 async def analyse(data:Input):
     print("initialised /analyse route")
-    print("got data with prompt: {data.prompt}")
+    print(f"got data with prompt: {data.prompt}")
 #need to convert the image to base 64 vth both the ways , ocr and gemini vision
     base64_img=data.image.split(",")[-1]
     image_bytes = base64.b64decode(base64_img)
-    print("Imag converted to base64:{image_bytes}")
+    print(f"Imag converted to base64:{image_bytes}")
 
     #image-->diagram heavy?gemini vision : OCR
     is_diagram=is_diagram_image(image_bytes)
@@ -92,7 +93,7 @@ async def analyse(data:Input):
             },
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{image_bytes}"}
+                "image_url": {"url": f"data:image/png;base64,{base64_img}"}
             },
             {"type": "text", "text": data.prompt}
         ]
@@ -100,7 +101,7 @@ async def analyse(data:Input):
         print("callling ai for gemini vision:")
         response = await llm.ainvoke([message])
 
-        print("received the response from gemini vision:{response}")
+        print(f"received the response from gemini vision:{response}")
         return {"response":response}
     
     else:
@@ -130,7 +131,7 @@ async def analyse(data:Input):
         print("callling ai for OCR:")
         response = await llm.ainvoke([message])
 
-        print("received the response from OCR:{response}")
+        print(f"received the response from OCR:{response}")
         return {"response":response}
 
 
