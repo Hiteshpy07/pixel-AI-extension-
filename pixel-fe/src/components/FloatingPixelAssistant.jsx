@@ -396,9 +396,9 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 onMouseDown={handleMouseDown}
                 title="Drag to reposition widget"
               >
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-500/80 to-slate-800 p-0.5 shadow-md shadow-amber-500/20">
-                  <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center overflow-hidden">
-                    <MascotAvatar state={mascotState} className="w-full h-full scale-110" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 via-orange-400 to-amber-500 p-0.5 shadow-md shadow-amber-500/25 shrink-0">
+                  <div className="w-full h-full bg-gradient-to-br from-amber-200 via-amber-300 to-amber-400 rounded-[10px] flex items-center justify-center overflow-hidden border border-amber-300/60 shadow-inner">
+                    <MascotAvatar state={mascotState} className="w-full h-full" />
                   </div>
                 </div>
                 <div>
@@ -744,37 +744,37 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           }}
         >
           {/* Ambient Glow */}
-          <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 opacity-40 blur-md group-hover:opacity-80 transition-opacity duration-300 animate-pulse" />
+          <div className="absolute -inset-1 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 opacity-40 blur-md group-hover:opacity-80 transition-opacity duration-300 animate-pulse" />
 
           {/* Main Avatar Box */}
           <div
             className={`
-              relative w-16 h-16 rounded-2xl
-              bg-gradient-to-tr from-amber-500/80 via-slate-800 to-amber-600/60
-              p-0.5 shadow-2xl shadow-amber-500/20 flex items-center justify-center
+              relative w-10 h-10 rounded-xl
+              bg-gradient-to-tr from-amber-400 via-orange-400 to-amber-500
+              p-0.5 shadow-xl shadow-amber-500/25 flex items-center justify-center
               ${isDragging ? "cursor-grabbing scale-105" : "hover:scale-110 cursor-pointer"}
               transition-all duration-200
             `}
           >
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center relative overflow-hidden">
+            <div className="w-full h-full bg-gradient-to-br from-amber-200 via-amber-300 to-amber-400 rounded-[10px] flex items-center justify-center relative overflow-hidden border border-amber-300/60 shadow-inner">
               <MascotAvatar state={mascotState} className="w-full h-full" />
 
               {/* Status Indicator Dot on Corner */}
               <div
-                className={`absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full border-2 border-slate-950 z-10 ${
-                  backendStatus ? "bg-emerald-400 shadow-sm shadow-emerald-400" : "bg-rose-500"
+                className={`absolute top-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-amber-200 z-10 ${
+                  backendStatus ? "bg-emerald-500 shadow-sm shadow-emerald-500" : "bg-rose-500"
                 }`}
                 title={backendStatus ? "Backend Connected (port 5001)" : "Backend Offline"}
               />
 
               {/* Subtle hover highlight */}
-              <div className="absolute inset-0 bg-amber-500/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             </div>
           </div>
 
           {/* Tooltip on Hover when Closed */}
           {!isOpen && (
-            <div className="absolute left-18 top-1/2 -translate-y-1/2 bg-zinc-900 border border-white/10 text-white text-[11px] font-medium px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none flex items-center gap-1.5">
+            <div className="absolute left-13 top-1/2 -translate-y-1/2 bg-zinc-900 border border-white/10 text-white text-[11px] font-medium px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none flex items-center gap-1.5">
               <span>Pixel AI Assistant</span>
               <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">
                 Click
