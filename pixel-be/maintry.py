@@ -94,7 +94,7 @@ async def analyse(data:Input):
             {
                 "type": "image_url",
                 "image_url": {"url": f"data:image/png;base64,{base64_img}"}
-            },
+            }, 
             {"type": "text", "text": data.prompt}
         ]
     )
@@ -116,6 +116,10 @@ async def analyse(data:Input):
         full_text = page.markdown
         print(f"ocr extrated the text:{full_text}")
 
+        secured_text=redact_sensitive_data(full_text)
+        print(f"ocr extrated the text after redaction:{secured_text}")
+    
+
         #call the AI here , fro the extreacted text and the prompt
 
         message = HumanMessage(
@@ -125,7 +129,7 @@ async def analyse(data:Input):
                     "text": "You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code, also attached the prompt entered by the end user, suggest the ways to solve it or advise as a senior software engineer."
                 },
                 {"type": "text", "text": data.prompt},
-                {"type": "text", "text": full_text}
+                {"type": "text", "text": secured_text}
             ]
         )
         print("callling ai for OCR:")
