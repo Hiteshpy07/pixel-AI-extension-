@@ -1,4 +1,3 @@
-from email import message
 import os
 import base64
 
@@ -51,7 +50,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://screengrabber.netlify.app"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "https://screengrabber.netlify.app", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,7 +64,7 @@ class Input(BaseModel):
 @app.get("/")
 def root():
     print("server up and running")
-    return {"message": "server up and running"}
+    return {"status": "ok", "message": "server up and running"}
 
 
 @app.get("/analyse")
@@ -82,23 +81,27 @@ async def analyse(data:Input):
     if is_diagram:
         print("Diagram detected,using Model vision")
         #gemini vision-diractly calling AI here
-
+        
 
 #imput messgae to the AI model
         message = HumanMessage(
-        content=[
-            {
-                "type": "text", 
-                "text": "You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code, also attached the prompt entered by the end user, suggest the ways to solve it or advise as a senior software engineer."
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{base64_img}"}
-            }, 
-            {"type": "text", "text": data.prompt}
-        ]
-    )
-        print("callling ai for gemini vision:")
+            content=[
+                {
+                    "type": "text", 
+                    "text": (
+                        "You are Pixel, a helpful AI assistant and senior software engineer. "
+                        "Describe what you see in this screenshot, summarize any UI components, architecture, "
+                        "or workflow diagrams, and suggest optimal solutions or advice."
+                    )
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{base64_img}"}
+                }, 
+                {"type": "text", "text": f"User Request: {data.prompt}"}
+            ]
+        )
+        print("🤖 Calling AI with Gemini Vision...")
         response = await llm.ainvoke([message])
 
         print(f"received the response from gemini vision:{response}")
@@ -118,7 +121,7 @@ async def analyse(data:Input):
 
         secured_text=redact_sensitive_data(full_text)
         print(f"ocr extrated the text after redaction:{secured_text}")
-    
+
 
         #call the AI here , fro the extreacted text and the prompt
 
@@ -126,10 +129,14 @@ async def analyse(data:Input):
             content=[
                 {
                     "type": "text", 
-                    "text": "You are Pixel, a helpful AI assistant. Describe what you see in this screenshot and summarize any text or code, also attached the prompt entered by the end user, suggest the ways to solve it or advise as a senior software engineer."
+                    "text": (
+                        "You are Pixel, a helpful AI assistant and senior software engineer. "
+                        "Analyze the following code/text extracted from the user's screenshot, "
+                        "explain errors or logic, and provide actionable fixes."
+                    )
                 },
-                {"type": "text", "text": data.prompt},
-                {"type": "text", "text": secured_text}
+                {"type": "text", "text": f"User Prompt: {data.prompt}"},
+                {"type": "text", "text": f"Extracted Text:\n```\n{secured_text}\n```"}
             ]
         )
         print("callling ai for OCR:")
