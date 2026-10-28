@@ -202,7 +202,28 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
         setResultText(output);
         setChatMessages([{ role: "model", text: output }]);
       } else {
-        const response = await fetch("http://localhost:5001/stream-analyze", {
+        // 1. Try smart-route /analyse route (maintry.py: Diagram detection + Secret Redaction)
+        let usedSmartRoute = false;
+        try {
+          const smartRes = await fetch("http://localhost:5001/analyse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: imageData, prompt: promptToSend }),
+          });
+          if (smartRes.ok) {
+            const data = await smartRes.json();
+            const text = data.text || data.response || "Analysis completed.";
+            const routeInfo = data.route_chosen ? `> ⚡ **Route**: \`${data.route_chosen}\` ${data.is_diagram ? "(Visual Architecture)" : "(Local OCR + Privacy Shield)"}\n\n` : "";
+            setResultText(routeInfo + text);
+            setChatMessages([{ role: "model", text: text }]);
+            usedSmartRoute = true;
+          }
+        } catch (e) {
+          console.log("Falling back to stream-analyze:", e);
+        }
+
+        if (!usedSmartRoute) {
+          const response = await fetch("http://localhost:5001/stream-analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -227,11 +248,12 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
         }
 
         setChatMessages([{ role: "model", text: accumulated }]);
+        }
       }
     } catch (error) {
       console.error("Analysis error:", error);
       setResultText(
-        "⚠️ Could not reach Pixel backend (port 5001).\n\nPlease make sure your FastAPI backend server is running:\n`python main.py` in pixel-be"
+        "⚠️ Could not reach Pixel backend (port 5001).\n\nPlease make sure your FastAPI backend server is running:\n`python maintry.py` in pixel-be"
       );
     } finally {
       setIsLoading(false);
@@ -758,6 +780,20 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           >
             <div className="w-full h-full bg-gradient-to-br from-amber-200 via-amber-300 to-amber-400 rounded-[10px] flex items-center justify-center relative overflow-hidden border border-amber-300/60 shadow-inner">
               <MascotAvatar state={mascotState} className="w-full h-full" />
+
+              {/* Quick Instant Snip Camera Trigger */}
+              {!isOpen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowOverlay(true);
+                  }}
+                  title="Snip Screen Area (Alt+S)"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/50 flex items-center justify-center hover:scale-125 active:scale-95 transition-all z-20 border border-white/20"
+                >
+                  <Camera className="w-2.5 h-2.5" />
+                </button>
+              )}
 
               {/* Status Indicator Dot on Corner */}
               <div

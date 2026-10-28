@@ -109,7 +109,15 @@ export default function SelectionOverlay({ onCaptured, onImageReady }) {
     }
   };
 
+  const containerRef = useRef(null);
+
   const finalizeCapture = async (cropData) => {
+    // Hide overlay briefly so screenshot captures pure webpage without dark mask
+    if (containerRef.current) {
+      containerRef.current.style.opacity = "0";
+    }
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
     // 1. If running inside Chrome Extension content script context
     if (
       typeof chrome !== "undefined" &&
@@ -153,7 +161,7 @@ export default function SelectionOverlay({ onCaptured, onImageReady }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[2147483647] select-none cursor-crosshair">
+    <div ref={containerRef} className="fixed inset-0 z-[2147483647] select-none cursor-crosshair transition-opacity duration-75">
       <canvas
         ref={canvasRef}
         onMouseDown={(e) => {
