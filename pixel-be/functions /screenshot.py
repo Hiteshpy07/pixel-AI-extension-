@@ -12,7 +12,7 @@ def screenshot(image_input : Union[str, bytes, None] = None):
         return image.convert('RGB')
 
 
-    if type(image_input)=="str" and not image_input.startswith("data:"):
+    if type(image_input)==str and not image_input.startswith("data:"):
         #means str-->base64 or file name , not data:----- means it sis not a base64 data , it sis surely a file name stored inmy local
         print("iuts a localfile on my disk")
         try:
@@ -22,7 +22,7 @@ def screenshot(image_input : Union[str, bytes, None] = None):
         except Exception:
             pass
 
-    elif type(image_input)=="str" and image_input.startswith("data:"):
+    elif type(image_input)==str and image_input.startswith("data:"):
         #surely is is a base64 data of a image
         print("its a base64 image passed")
         base64_str = image_input.split(",")[-1]
