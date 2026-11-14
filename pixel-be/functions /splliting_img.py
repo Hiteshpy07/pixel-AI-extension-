@@ -15,7 +15,7 @@ def splitnsave(
     if not image:
         raise ValueError("image_input is required")
     
-    os.mkdirs(output_dir, exist_ok=True)#create the director , if  there , its ok
+    os.makdirs(output_dir, exist_ok=True)#create the director , if  there , its ok
     width, height = image.size
     print(f"📐 Original screenshot dimensions: {width}x{height}")
     
