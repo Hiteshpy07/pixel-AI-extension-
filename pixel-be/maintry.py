@@ -15,7 +15,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
 from smartroutedetection import is_diagram_image
-from hidingsecrets import redact_sensitive_data
+# from hidingsecrets import redact_sensitive_data
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
