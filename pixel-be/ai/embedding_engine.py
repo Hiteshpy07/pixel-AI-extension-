@@ -118,9 +118,32 @@ def embed_query(query:str)->np.ndarray:
         return v / np.linalg.norm(v)
         #same fall back to randomise the erorr so that the process dont stop 
 
+"Why do we need a separate function embed_query_for_diagrams()? Why can't I just reuse embed_text() or embed_diagram() to convert my search query?"
 
+'''
+💡 The Answer (in 3 Simple Points):
+
+If you use embed_text():
+
+It uses MiniLM, which outputs 384 numbers.
+Your diagrams have 512 numbers.
+You can't compare a 384-length list with a 512-length list 
+→
+→ it crashes with an error.
+
+If you use embed_diagram():
+
+It expects an image file on your disk (like "diagram1.png").
+If you give it the words "auth flowchart", it searches your hard drive for a file named "auth flowchart" 
+→
+→ it crashes because the file doesn't exist.
+
+Why embed_query_for_diagrams() is necessary:
+
+It uses CLIP’s built-in text encoder.
+It translates your text query into 512 numbers that speak the exact same language as the 512 numbers of the diagram image!
 
     
-        
+        '''
             
 
