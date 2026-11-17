@@ -54,8 +54,49 @@ class VectorStore:
 
 
 
-    def search_code():
+    def search_code(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """search code using similarity search."""
+        if not self.text_records:# self.textrecords is the text vector dict locally 
+            return [] 
+
+        query_vector=embed_query(query)
+        scored = []
+        for record in self.text_records:
+            score = float(np.dot(query_vector, record["vector"]))
+            scored.append({**record, "similarity": score})
+        scored.sort(key=lambda x: x["similarity"], reverse=True)
+        return scored[:top_k]
+
+
+
+    def search_diagrams(self, query_img_path: str, top_k: int = 3) -> List[Dict[str, Any]]:
+        """Search for similar visual components (buttons, cards, forms, etc.)."""
+        if not self.visual_records:
+            return []
+
+        query_vector = embed_diagrams(query_img_path)
+        scored = []
+        for record in self.visual_records:
+            score = float(np.dot(query_vector, record["vector"]))
+            scored.append({**record, "similarity": score})
+        scored.sort(key=lambda x: x["similarity"], reverse=True)
+        return scored[:top_k]
+
+
+    def search_hybrid(self, query: str, top_k: int = 3) -> Dict[str, Any]:
+        """Multi-modal search across code + diagrams (for advanced agents)."""
+        code_results = self.search_code(query, top_k=top_k)
+        # In a real app, we'd embed the query as an image too or do cross-modal search
+        # For now, we'll just return both
+        return {
+            "query": query,
+            "code_matches": code_results,
+            "visual_matches": []  # Add visual search later
+        }
+
+
+# making this a singleton  for global access accross project
+vector_db = VectorStore()
 
 
         
