@@ -1,3 +1,4 @@
+from langchain_core._api.path import HERE
 import os
 import sys
 from pathlib import Path
@@ -23,7 +24,7 @@ def text_model():
     if _text_model is None:
         try:
             from sentence_transformers import SentenceTransformer  
-             print("⏳ Loading 384-d MiniLM model (all-MiniLM-L6-v2)...")
+            print("⏳ Loading 384-d MiniLM model (all-MiniLM-L6-v2)...")
             _text_model = SentenceTransformer("all-MiniLM-L6-v2")
             print("text model ready ")
 
@@ -49,3 +50,57 @@ def clipmodel():
 
 #thisis done to keep or scope free and dont freeeze when the models will be impiorted at the start of the code 
 #it will be imported when requeired
+
+
+
+def embed_text(text:str)->np.ndarray: #what is np.ndarray? lean more about it 
+    "this function will turn the text into embeddings"
+    if not text:
+        return np.zeros(384, dtype=np.float32) #a standard empty embeddings to the stoirage 
+    model = text_model()
+
+    if model:
+        vector = model.encode(text, normalize_embeddings=True)
+        return np.array(vector, dtype=np.float32)
+    # retun type f the embeddings
+
+
+    else:
+        # Fallback if model failed to load
+        np.random.seed(abs(hash(text)) % (2**32))
+        v = np.random.randn(384).astype(np.float32)
+        return v / np.linalg.norm(v)
+
+        # "If the AI model isn't downloaded yet, take the text, turn its letters into a fixed seed, generate 384 numbers, normalize their length to 1.0, and return it so the rest of the application can keep running smoothly without crashing."
+
+
+
+
+def embed_diagrams(image_input:Union[str,Image.Image])->np.ndarray: 
+    "this will turn the diagrmas into embeddings"
+
+    if isinstance(image_input,str):#checking ehher we are give a str(image path ) as the unput to this fucntion 
+        if not os.path(image_input):
+            return np.zeros(512, dtype=np.float32) #fallback embeddings
+
+        img=Image.open(image_input).convert('RGB')
+    else:#the imput may be given as bytes, base64 
+        img=image_input
+
+    model=clipmodel
+    if model :
+        vector = model.encode(img, normalize_embeddings=True)
+        return np.array(vector, dtype=np.float32)
+
+    else:
+        np.random.seed(img.size[0] * img.size[1])
+        v = np.random.randn(512).astype(np.float32)
+        return v / np.linalg.norm(v)
+
+    #same a fallback to conbvert the erro in to a 512 bit embedding so that the process dont stop and the proxces runs smoothly
+    
+
+    
+        
+            
+
