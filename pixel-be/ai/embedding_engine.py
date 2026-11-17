@@ -98,7 +98,27 @@ def embed_diagrams(image_input:Union[str,Image.Image])->np.ndarray:
         return v / np.linalg.norm(v)
 
     #same a fallback to conbvert the erro in to a 512 bit embedding so that the process dont stop and the proxces runs smoothly
-    
+
+
+
+# now our query will contain text only , as we are talking. about a screen shot , and not a specific part , so the oerall image will be availabe for the query and thet text we have given will be availabe as the input 
+def embed_query(query:str)->np.ndarray:
+    '''this functiuon will be used to convert the query asked by the user to converted into embeddings for cosine seraching it '''
+    #mehre the wuery will be converted to 512 d space so that i can be searched in bith the text and images sucessfully 
+    #clip model will be used to do that 
+    model=clipmodel()
+
+    if model:
+        vector = model.encode(query, normalize_embeddings=True)
+        return np.array(vector, dtype=np.float32)
+
+    else:
+        np.random.seed(abs(hash(query)) % (2**32))
+        v = np.random.randn(512).astype(np.float32)
+        return v / np.linalg.norm(v)
+        #same fall back to randomise the erorr so that the process dont stop 
+
+
 
     
         
