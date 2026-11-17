@@ -45,3 +45,7 @@ def clipmodel():
             print("failed loading clip model")
 
     return _clip_model
+
+
+#thisis done to keep or scope free and dont freeeze when the models will be impiorted at the start of the code 
+#it will be imported when requeired
