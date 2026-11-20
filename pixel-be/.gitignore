@@ -2,7 +2,7 @@
 .env
 .env.*
 *.env
-main.py
+maintry.py
 test_compare.py
 test_smart_route.py
 
