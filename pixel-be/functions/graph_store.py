@@ -49,8 +49,40 @@ class GraphStore:
 
 
     def _init_db(self):
-        ''
+        'now as we have recevie the connections and all , here we will create coluns adn rows to fill up data'
+        with self._get_connection() as conn:
+            cursor = conn.cursor()#what is cursor ? why it is used??
+
+            #creating the table-nodes table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS nodes (
+                    id TEXT PRIMARY KEY,
+                    parent_id TEXT,
+                    node_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT,
+                    meta_json TEXT,
+                    created_at REAL NOT NULL,
+                    FOREIGN KEY (parent_id) REFERENCES nodes (id) ON DELETE SET NULL
+                )
+            """)
+            #the edge table is cretaed to establish connection beteen the nodes 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS edges (
+                    id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    relation TEXT NOT NULL,
+                    weight REAL DEFAULT 1.0,
+                    FOREIGN KEY (source_id) REFERENCES nodes (id) ON DELETE CASCADE,
+                    FOREIGN KEY (target_id) REFERENCES nodes (id) ON DELETE CASCADE
+                )
+            """)
+            conn.commit() 
+
+
     
+
 
         
 
