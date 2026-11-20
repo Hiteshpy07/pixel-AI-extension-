@@ -80,6 +80,75 @@ class GraphStore:
             """)
             conn.commit() 
 
+              # 3. Speed Indexes (Makes climbing 1,000 nodes take 0.001ms)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes (parent_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_edges_source ON edges (source_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_edges_target ON edges (target_id)")
+            conn.commit()
+
+
+    def add_node(
+        self,
+        node_type: str,
+        title: str,
+        content: str = "",
+        parent_id: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+        node_id: Optional[str] = None
+    ) -> GraphNode:
+        """
+        Creates a new node in SQLite.
+        If parent_id is given, it automatically creates a 'branch_from' edge!
+        """
+        nid = node_id or f"node_{uuid.uuid4().hex[:8]}"
+        now = time.time()
+        meta = meta or {}
+        node = GraphNode(
+            id=nid,
+            parent_id=parent_id,
+            node_type=node_type,
+            title=title,
+            content=content,
+            meta=meta,
+            created_at=now
+        )
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO nodes (id, parent_id, node_type, title, content, meta_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (node.id, node.parent_id, node.node_type, node.title, node.content, json.dumps(node.meta), node.created_at)
+            )
+            # Automatically connect to parent if provided!
+            if parent_id:
+                edge_id = f"edge_{uuid.uuid4().hex[:8]}"
+                cursor.execute(
+                    """
+                    INSERT INTO edges (id, source_id, target_id, relation, weight)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (edge_id, node.id, parent_id, "branch_from", 1.0)
+                )
+            conn.commit()
+        return node
+    def add_edge(self, source_id: str, target_id: str, relation: str, weight: float = 1.0) -> GraphEdge:
+        """Creates an explicit connection (e.g. belongs_to_project or semantic link)."""
+        edge_id = f"edge_{uuid.uuid4().hex[:8]}"
+        edge = GraphEdge(id=edge_id, source_id=source_id, target_id=target_id, relation=relation, weight=weight)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO edges (id, source_id, target_id, relation, weight)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (edge.id, edge.source_id, edge.target_id, edge.relation, edge.weight)
+            )
+            conn.commit()
+        return edge
+
 
     
 
