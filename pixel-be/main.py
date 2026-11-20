@@ -302,10 +302,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class ChaRequest(BaseModel):
+    message: str #wht th euse asked...                                
+    parent_node_id: Optional[str] = None
+    ''''1eews  ,,,,,,,,'''
+
+
+
+
+
 
 @app.get('/')
 def root():
-    ''
+    'just health check on this route...'
+    return {
+        "status": "online",
+        "app": "Pixel AI Brain",
+        "version": "2.0.0"
+    }
+
+
 @app.post("/capture")
 def capture_screen():
     ''
