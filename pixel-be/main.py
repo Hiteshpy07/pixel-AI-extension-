@@ -272,7 +272,6 @@ from functions.splliting_img import splitnsave
 from functions.redaction import redact_info
 from functions.graph_store import GraphStore
 from ai.vector_store import VectorStore
-from ai.model_processor import read_text_from_file
 from ai.model_processor import ocr_img
 
 
@@ -496,7 +495,48 @@ def chat_endpoint(req: ChatRequest):
         print(f"CHAT ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.get("/graph")
 def get_graph():
-    return graph_store.get_graph_data()
+    """
+    Returns the full knowledge graph in Obsidian/D3 Force-Graph format:
+    { "nodes": [...], "links": [...] }
+    Used directly by the frontend (react-force-graph-2d) to render
+    interactive visual bubbles for projects, screens, and chat branches.
+    """
+    try:
+        data = graph_store.get_graph_data()
+        return data
+    except Exception as e:
+        print(f"GRAPH ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/graph/branch/{node_id}")
+def get_branch_history(node_id: str):
+    """
+    Returns the linear conversation chain leading up to this node.
+    Used when the user clicks a bubble to load that exact past chat branch!
+    """
+    try:
+        chain = graph_store.get_branch_history(node_id)
+        return {
+            "node_id": node_id,
+            "chain": [
+                {
+                    "id": n.id,
+                    "parent_id": n.parent_id,
+                    "type": n.node_type,
+                    "title": n.title,
+                    "content": n.content,
+                    "created_at": n.created_at,
+                    "meta": n.meta
+                }
+                for n in chain
+            ]
+        }
+    except Exception as e:
+        print(f"BRANCH ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+        
+
