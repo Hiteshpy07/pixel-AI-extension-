@@ -376,6 +376,19 @@ def capture_screen(req: CaptureRequest):
         )
     graph_store.add_edge(screen_node.id, proj_node.id, "belongs_to_project")
 
+    #vectorising the data 
+    vector_store.index_screen(
+            screen_id=screen_node.id,
+            project_name=active_project,
+            code_text=safe_code,
+            diagram_crops=diagram_crops
+        )
+
+    
+
+
+
+
 
 @app.post('/chat')
 def chat_endpoint():
