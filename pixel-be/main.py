@@ -306,7 +306,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class ChaRequest(BaseModel):
+class ChatRequest(BaseModel):
     message: str #wht th euse asked...                                
     parent_node_id: Optional[str] = None
 
@@ -383,18 +383,120 @@ def capture_screen(req: CaptureRequest):
             code_text=safe_code,
             diagram_crops=diagram_crops
         )
+#optional prompt to gemini , just for remebering the stuff snf not propts adked
+    ai_reply = None
+    if req.prompt:
+        contents = [
+            f"You are Pixel, a senior software companion.\n"
+            f"Project: {active_project}\n"
+            f"Tabs: {detected_tabs}\n\n"
+            f"User Question: {req.prompt}\n\n"
+            f"Extracted Code:\n```\n{safe_code}\n```"
+        ]
+        # Attach only the cropped diagrams (saves 80% tokens!)
+        for crop in diagram_crops:
+            crop_path = crop.get("file_path")
+            if crop_path and os.path.exists(crop_path):
+                with open(crop_path, "rb") as f:
+                    contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/png"))
+
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents
+        )
+        ai_reply = resp.text
+
+        # Record question & answer as nodes in the graph!
+        user_node = graph_store.add_node(
+            node_type="chat_message",
+            title=f"User: {req.prompt[:30]}...",
+            content=req.prompt,
+            parent_id=screen_node.id
+        )
+        graph_store.add_node(
+            node_type="chat_message",
+            title=f"AI: {ai_reply[:30]}...",
+            content=ai_reply,
+            parent_id=user_node.id
+        )
+
+    # Return summary back to the extension/frontend
+    return {
+        "status": "success",
+        "screen_node_id": screen_node.id,
+        "project": active_project,
+        "detected_tabs": detected_tabs,
+        "diagrams_found": len(diagram_crops),
+        "ai_response": ai_reply
+    }
 
     
 
 
-
-
-
 @app.post('/chat')
-def chat_endpoint():
-    ''
+def chat_endpoint(req: ChatRequest):
+    """
+    Searches the vector memory with the user's query, retrieves matching code/visuals,
+    reconstructs branch conversation history, and prompts Gemini 2.5 Flash.
+    """
+    try:
+        hybrid_memory = vector_store.search_hybrid(req.message, top_k=2)
+
+        # Context from previous conversation branch in graph
+        lineage_context = ""
+        if req.parent_node_id:
+            chain = graph_store.get_branch_history(req.parent_node_id)
+            for node in chain:
+                lineage_context += f"[{node.node_type.upper()}]: {node.title}\n{node.content}\n\n"
+
+        # Prompt text to get the answer
+        prompt_text = (
+            f"You are Pixel, an expert software engineering companion.\n\n"
+            f"--- RELEVANT PAST SCREEN MEMORY ---\n"
+            f"Code Matches: {[m['text'][:150] for m in hybrid_memory['code_matches']]}\n\n"
+            f"--- CONVERSATION BRANCH CONTEXT ---\n{lineage_context}\n"
+            f"User Question: {req.message}\n"
+        )
+        contents = [prompt_text]
+
+        # Finding matching visuals
+        for match in hybrid_memory.get("visual_matches", []):
+            img_path = match.get("file_path")
+            if img_path and os.path.exists(img_path):
+                with open(img_path, "rb") as f:
+                    contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/png"))
+
+        # Calling Gemini 2.5 Flash
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents
+        )
+        ai_reply = response.text
+
+        # Storing the question and reply as graph nodes
+        user_node = graph_store.add_node(
+            node_type="chat_message",
+            title=f"User: {req.message[:30]}...",
+            content=req.message,
+            parent_id=req.parent_node_id
+        )
+        ai_node = graph_store.add_node(
+            node_type="chat_message",
+            title=f"AI: {ai_reply[:30]}...",
+            content=ai_reply,
+            parent_id=user_node.id
+        )
+        return {
+            "status": "success",
+            "reply": ai_reply,
+            "user_node_id": user_node.id,
+            "ai_node_id": ai_node.id
+        }
+    except Exception as e:
+        print(f"CHAT ERROR: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/graph")
 def get_graph():
-    ''
+    return graph_store.get_graph_data()
