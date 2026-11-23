@@ -354,8 +354,27 @@ def capture_screen(req: CaptureRequest):
     raw_code = ocr_img(viewport_file)
     safe_code = redact_info(raw_code)
 
+#saving the above data ot sqlite ifor a context 
 
-    
+    proj_id = f"proj_{active_project.lower().replace(' ', '_')}"
+    proj_node = graph_store.add_node(
+            node_type="project",
+            title=f"Project: {active_project}",
+            node_id=proj_id
+        )
+    screen_node = graph_store.add_node(
+            node_type="screen",
+            title=f"Screen: {active_project} ({len(diagram_crops)} diagrams)",
+            content=safe_code[:300] if safe_code else "No code extracted",
+            parent_id=req.parent_node_id or proj_node.id,
+            meta={
+                "tabs": detected_tabs,
+                "project": active_project,
+                "diagram_count": len(diagram_crops),
+                "full_code": safe_code
+            }
+        )
+    graph_store.add_edge(screen_node.id, proj_node.id, "belongs_to_project")
 
 
 @app.post('/chat')
