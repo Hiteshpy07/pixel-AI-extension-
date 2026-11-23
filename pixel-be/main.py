@@ -273,6 +273,10 @@ from functions.redaction import redact_info
 from functions.graph_store import GraphStore
 from ai.vector_store import VectorStore
 from ai.model_processor import read_text_from_file
+from ai.model_processor import ocr_img
+
+
+
 
 
 load_dotenv()
@@ -305,9 +309,12 @@ app.add_middleware(
 class ChaRequest(BaseModel):
     message: str #wht th euse asked...                                
     parent_node_id: Optional[str] = None
-    ''''1eews  ,,,,,,,,'''
 
-
+class CaptureRequest(BaseModel):
+    image: str                                   # Base64 string or file path
+    prompt: Optional[str] = None                 # Optional question about the screen
+    project_name: Optional[str] = None           # Optional project name override
+    parent_node_id: Optional[str] = None         # Optional branch parent
 
 
 
@@ -323,8 +330,33 @@ def root():
 
 
 @app.post("/capture")
-def capture_screen():
-    ''
+def capture_screen(req: CaptureRequest):
+    'this function is to capture the scren and process it , read it , bisect it send to all the ai models and let it learn'
+
+    pil_image=screenshot(req.image)
+    split_data=splitnsave(pil_image)
+    #taking parts of the split image 
+    tab_file=split_data['tab_bar_file']
+    viewport_file=split_data['viewport_file']
+    diagram_crops = split_data["diagram_crops"]
+
+#processingt he tabs context
+    raw_tabs=ocr_img(tab_file)
+    detected_tabs = [line.strip() for line in raw_tabs.split("\n") if len(line.strip()) > 2]
+    active_project = req.project_name or "General Workspace"
+    for t in detected_tabs:
+        if any(k in t.lower() for k in ["github", "localhost", "pixel", "vscode", "stripe"]):
+            active_project = t.split("-")[0].strip()
+            break
+
+
+#processing th viewport images 
+    raw_code = ocr_img(viewport_file)
+    safe_code = redact_info(raw_code)
+
+
+    
+
 
 @app.post('/chat')
 def chat_endpoint():
