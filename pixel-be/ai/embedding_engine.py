@@ -79,16 +79,16 @@ def embed_text(text:str)->np.ndarray: #what is np.ndarray? lean more about it
 def embed_diagrams(image_input:Union[str,Image.Image])->np.ndarray: 
     "this will turn the diagrmas into embeddings"
 
-    if isinstance(image_input,str):#checking ehher we are give a str(image path ) as the unput to this fucntion 
-        if not os.path(image_input):
-            return np.zeros(512, dtype=np.float32) #fallback embeddings
+    if isinstance(image_input, str):  # checking whether we are given a str(image path)
+        if not os.path.exists(image_input):
+            return np.zeros(512, dtype=np.float32)  # fallback embeddings
 
-        img=Image.open(image_input).convert('RGB')
-    else:#the imput may be given as bytes, base64 
-        img=image_input
+        img = Image.open(image_input).convert('RGB')
+    else:  # the input may be Image.Image
+        img = image_input
 
-    model=clipmodel
-    if model :
+    model = clipmodel()
+    if model:
         vector = model.encode(img, normalize_embeddings=True)
         return np.array(vector, dtype=np.float32)
 

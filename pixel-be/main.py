@@ -331,38 +331,40 @@ def root():
 
 @app.post("/capture")
 def capture_screen(req: CaptureRequest):
-    'this function is to capture the scren and process it , read it , bisect it send to all the ai models and let it learn'
+    """
+    Captures screen, bisects tabs, runs OCR, extracts diagrams, redacts secrets,
+    indexes into SQLite graph & vector memory, and answers initial prompt.
+    """
+    try:
+        pil_image = screenshot(req.image)
+        split_data = splitnsave(pil_image)
 
-    pil_image=screenshot(req.image)
-    split_data=splitnsave(pil_image)
-    #taking parts of the split image 
-    tab_file=split_data['tab_bar_file']
-    viewport_file=split_data['viewport_file']
-    diagram_crops = split_data["diagram_crops"]
+        # Taking parts of the split image
+        tab_file = split_data['tab_bar_file']
+        viewport_file = split_data['viewport_file']
+        diagram_crops = split_data["diagram_crops"]
 
-#processingt he tabs context
-    raw_tabs=ocr_img(tab_file)
-    detected_tabs = [line.strip() for line in raw_tabs.split("\n") if len(line.strip()) > 2]
-    active_project = req.project_name or "General Workspace"
-    for t in detected_tabs:
-        if any(k in t.lower() for k in ["github", "localhost", "pixel", "vscode", "stripe"]):
-            active_project = t.split("-")[0].strip()
-            break
+        # Processing tabs context
+        raw_tabs = ocr_img(tab_file)
+        detected_tabs = [line.strip() for line in raw_tabs.split("\n") if len(line.strip()) > 2]
+        active_project = req.project_name or "General Workspace"
+        for t in detected_tabs:
+            if any(k in t.lower() for k in ["github", "localhost", "pixel", "vscode", "stripe"]):
+                active_project = t.split("-")[0].strip()
+                break
 
+        # Processing viewport code
+        raw_code = ocr_img(viewport_file)
+        safe_code = redact_info(raw_code)
 
-#processing th viewport images 
-    raw_code = ocr_img(viewport_file)
-    safe_code = redact_info(raw_code)
-
-#saving the above data ot sqlite ifor a context 
-
-    proj_id = f"proj_{active_project.lower().replace(' ', '_')}"
-    proj_node = graph_store.add_node(
+        # Saving data to SQLite graph memory
+        proj_id = f"proj_{active_project.lower().replace(' ', '_')}"
+        proj_node = graph_store.add_node(
             node_type="project",
             title=f"Project: {active_project}",
             node_id=proj_id
         )
-    screen_node = graph_store.add_node(
+        screen_node = graph_store.add_node(
             node_type="screen",
             title=f"Screen: {active_project} ({len(diagram_crops)} diagrams)",
             content=safe_code[:300] if safe_code else "No code extracted",
@@ -374,61 +376,67 @@ def capture_screen(req: CaptureRequest):
                 "full_code": safe_code
             }
         )
-    graph_store.add_edge(screen_node.id, proj_node.id, "belongs_to_project")
+        graph_store.add_edge(screen_node.id, proj_node.id, "belongs_to_project")
 
-    #vectorising the data 
-    vector_store.index_screen(
+        # Vectorizing data
+        vector_store.index_screen(
             screen_id=screen_node.id,
             project_name=active_project,
             code_text=safe_code,
             diagram_crops=diagram_crops
         )
-#optional prompt to gemini , just for remebering the stuff snf not propts adked
-    ai_reply = None
-    if req.prompt:
-        contents = [
-            f"You are Pixel, a senior software companion.\n"
-            f"Project: {active_project}\n"
-            f"Tabs: {detected_tabs}\n\n"
-            f"User Question: {req.prompt}\n\n"
-            f"Extracted Code:\n```\n{safe_code}\n```"
-        ]
-        # Attach only the cropped diagrams (saves 80% tokens!)
-        for crop in diagram_crops:
-            crop_path = crop.get("file_path")
-            if crop_path and os.path.exists(crop_path):
-                with open(crop_path, "rb") as f:
-                    contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/png"))
 
-        resp = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=contents
-        )
-        ai_reply = resp.text
+        # Optional prompt to Gemini
+        ai_reply = None
+        if req.prompt:
+            contents = [
+                f"You are Pixel, a senior software companion.\n"
+                f"Project: {active_project}\n"
+                f"Tabs: {detected_tabs}\n\n"
+                f"User Question: {req.prompt}\n\n"
+                f"Extracted Code:\n```\n{safe_code}\n```"
+            ]
+            # Attach cropped diagrams
+            for crop in diagram_crops:
+                crop_path = crop.get("file_path")
+                if crop_path and os.path.exists(crop_path):
+                    with open(crop_path, "rb") as f:
+                        contents.append(types.Part.from_bytes(data=f.read(), mime_type="image/png"))
 
-        # Record question & answer as nodes in the graph!
-        user_node = graph_store.add_node(
-            node_type="chat_message",
-            title=f"User: {req.prompt[:30]}...",
-            content=req.prompt,
-            parent_id=screen_node.id
-        )
-        graph_store.add_node(
-            node_type="chat_message",
-            title=f"AI: {ai_reply[:30]}...",
-            content=ai_reply,
-            parent_id=user_node.id
-        )
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=contents
+            )
+            ai_reply = resp.text
 
-    # Return summary back to the extension/frontend
-    return {
-        "status": "success",
-        "screen_node_id": screen_node.id,
-        "project": active_project,
-        "detected_tabs": detected_tabs,
-        "diagrams_found": len(diagram_crops),
-        "ai_response": ai_reply
-    }
+            # Record question & answer as nodes in the graph!
+            user_node = graph_store.add_node(
+                node_type="chat_message",
+                title=f"User: {req.prompt[:30]}...",
+                content=req.prompt,
+                parent_id=screen_node.id
+            )
+            graph_store.add_node(
+                node_type="chat_message",
+                title=f"AI: {ai_reply[:30]}...",
+                content=ai_reply,
+                parent_id=user_node.id
+            )
+
+        # Return summary back to the extension/frontend
+        return {
+            "status": "success",
+            "screen_node_id": screen_node.id,
+            "project": active_project,
+            "detected_tabs": detected_tabs,
+            "diagrams_found": len(diagram_crops),
+            "ai_response": ai_reply
+        }
+    except Exception as e:
+        print(f"CAPTURE ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
     
 

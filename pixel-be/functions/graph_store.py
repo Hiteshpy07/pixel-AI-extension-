@@ -116,7 +116,7 @@ class GraphStore:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO nodes (id, parent_id, node_type, title, content, meta_json, created_at)
+                INSERT OR REPLACE INTO nodes (id, parent_id, node_type, title, content, meta_json, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (node.id, node.parent_id, node.node_type, node.title, node.content, json.dumps(node.meta), node.created_at)
@@ -126,7 +126,7 @@ class GraphStore:
                 edge_id = f"edge_{uuid.uuid4().hex[:8]}"
                 cursor.execute(
                     """
-                    INSERT INTO edges (id, source_id, target_id, relation, weight)
+                    INSERT OR IGNORE INTO edges (id, source_id, target_id, relation, weight)
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     (edge_id, node.id, parent_id, "branch_from", 1.0)
@@ -141,7 +141,7 @@ class GraphStore:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO edges (id, source_id, target_id, relation, weight)
+                INSERT OR IGNORE INTO edges (id, source_id, target_id, relation, weight)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (edge.id, edge.source_id, edge.target_id, edge.relation, edge.weight)

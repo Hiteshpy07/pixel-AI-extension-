@@ -1,11 +1,11 @@
 import re
 
-def redact_info(text:str):
-    ''' basically it takes the retext from ocr , pass ot thorugh itself , and maskes the sensitive information , before passingit to ai clous models'''
-    # uses rezex model fo pythin
-
-    if not retext:
+def redact_info(text: str) -> str:
+    '''Basically takes text from OCR, passes it through regex filters, and masks sensitive information before passing to AI cloud models'''
+    if not text:
         return ""
+
+    retext = text
 
       # 1. Specific Cloud Provider API Keys
     # OpenAI (sk-...), Google Gemini (AIza...), GitHub (ghp_..., gho_...), AWS (AKIA...)
