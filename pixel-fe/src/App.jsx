@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import FloatingPixelAssistant from "./components/FloatingPixelAssistant";
-import { Sparkles, Terminal, Code2, Globe, Laptop, ArrowUpRight } from "lucide-react";
+import KnowledgeGraphExplorer from "./components/KnowledgeGraphExplorer";
+import { Sparkles, Terminal, Code2, Globe, Laptop, ArrowUpRight, GitBranch } from "lucide-react";
 
 export default function App() {
-  const [demoPage, setDemoPage] = useState("code"); // "code" | "web"
+  const [demoPage, setDemoPage] = useState("graph"); // "graph" | "code" | "web"
 
   return (
     <div className="min-h-screen w-full bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200 relative overflow-hidden">
@@ -23,8 +24,17 @@ export default function App() {
 
         {/* Demo Content Toggle */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-400">Simulate Tab:</span>
+          <span className="text-xs text-zinc-400">View:</span>
           <div className="flex bg-zinc-950 p-1 rounded-xl border border-white/10 text-xs">
+            <button
+              onClick={() => setDemoPage("graph")}
+              className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                demoPage === "graph" ? "bg-purple-600 text-white shadow-sm" : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              <GitBranch className="w-3.5 h-3.5" />
+              <span>Knowledge Graph</span>
+            </button>
             <button
               onClick={() => setDemoPage("code")}
               className={`px-3 py-1 rounded-lg font-medium transition-all ${
@@ -39,15 +49,17 @@ export default function App() {
                 demoPage === "web" ? "bg-purple-600 text-white" : "text-zinc-400 hover:text-white"
               }`}
             >
-              Web Documentation Tab
+              Web Docs Tab
             </button>
           </div>
         </div>
       </nav>
 
-      {/* Simulated Page Content (Shows how Pixel floats on ANY page) */}
-      <div className="flex-1 max-w-5xl w-full mx-auto p-6 md:p-10 flex flex-col gap-6">
-        {demoPage === "code" ? (
+      {/* Main Content Viewport */}
+      <div className="flex-1 w-full max-w-6xl mx-auto p-4 md:p-8 flex flex-col gap-6">
+        {demoPage === "graph" ? (
+          <KnowledgeGraphExplorer />
+        ) : demoPage === "code" ? (
           <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-6 backdrop-blur-md flex flex-col gap-4">
             <div className="flex items-center justify-between pb-3 border-b border-white/5">
               <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
