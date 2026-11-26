@@ -182,12 +182,21 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
 
     setIsLoading(true);
     setResultText("");
-    setActiveTab("analysis");
+    setActiveTab("chat"); // Smoothly switch to Chat view immediately!
 
     const promptToSend =
       promptOverride ||
       customPrompt ||
       "Analyze this screen. Explain the code, diagnose any errors, and describe the diagrams.";
+
+    // Smoothly insert the user's screen capture into the chat flow!
+    const userCaptureMsg = {
+      role: "user",
+      text: promptToSend,
+      image: imageData,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, userCaptureMsg]);
 
     try {
       const response = await fetch("http://localhost:5001/capture", {
@@ -220,15 +229,21 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
 
       const reply = data.ai_response || "Screen analyzed, diagram contours extracted, and memory indexed in SQLite graph.";
       setResultText(reply);
-      setChatMessages([{ role: "model", text: reply }]);
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "model", text: reply, timestamp: Date.now() },
+      ]);
 
       // Silently refresh graph memory in background
       fetchGraph();
     } catch (error) {
       console.error("Capture error:", error);
-      setResultText(
-        "⚠️ Could not reach Pixel backend on port 5001.\n\nPlease start the server:\n`cd pixel-be && python main.py`"
-      );
+      const errMsg = "⚠️ Could not reach Pixel backend on port 5001.\n\nPlease start the server:\n`cd pixel-be && python main.py`";
+      setResultText(errMsg);
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "model", text: errMsg, timestamp: Date.now() },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -638,43 +653,74 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
             {/* TAB 2: BRANCH CHAT                                            */}
             {/* ------------------------------------------------------------- */}
             {activeTab === "chat" && (
-              <div className="flex-1 overflow-y-auto p-3 text-xs flex flex-col gap-2.5">
+              <div className="flex-1 overflow-y-auto p-3 text-xs flex flex-col gap-3">
                 {chatMessages.length === 0 ? (
                   <div className="h-48 flex flex-col items-center justify-center text-zinc-500 text-center gap-2">
                     <MessageSquare className="w-6 h-6 text-zinc-600" />
-                    <p className="text-[11px]">Ask follow-up questions about this screen or project!</p>
+                    <p className="text-[11px]">Snip any screen area (Alt+S) or ask Pixel a question!</p>
                   </div>
                 ) : (
                   chatMessages.map((msg, idx) => (
                     <div
                       key={idx}
-                      className={`flex gap-1.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                      className={`flex gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+                        msg.role === "user" ? "justify-end" : "justify-start"
+                      }`}
                     >
                       {msg.role !== "user" && (
-                        <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
                           <Sparkles className="w-3 h-3" />
                         </div>
                       )}
+
                       <div
-                        className={`max-w-[85%] text-xs rounded-2xl px-3 py-2 leading-relaxed whitespace-pre-wrap shadow-sm ${
+                        className={`max-w-[88%] text-xs rounded-2xl px-3 py-2.5 leading-relaxed shadow-md flex flex-col gap-1.5 ${
                           msg.role === "user"
                             ? "bg-purple-600 text-white rounded-br-sm"
                             : "bg-zinc-900 border border-white/10 text-zinc-200 rounded-bl-sm"
                         }`}
                       >
-                        {msg.text}
+                        {/* Smooth Animated Screen Capture Card */}
+                        {msg.image && (
+                          <div className="relative overflow-hidden rounded-xl border border-purple-400/40 bg-black/60 shadow-lg shadow-purple-950/60 mb-1 group transition-all duration-300 animate-in fade-in zoom-in-95">
+                            <img
+                              src={msg.image}
+                              alt="Captured screen snippet"
+                              className="w-full max-h-52 object-contain rounded-lg"
+                            />
+                            <div className="absolute top-2 left-2 bg-zinc-950/80 backdrop-blur-md px-2 py-0.5 rounded-full text-[9.5px] font-mono text-purple-200 border border-purple-500/30 flex items-center gap-1 shadow-sm">
+                              <Camera className="w-3 h-3 text-purple-400" />
+                              <span>Screen Snippet</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Message Text */}
+                        <div className="whitespace-pre-wrap leading-relaxed">
+                          {msg.role === "user" ? (
+                            msg.text
+                          ) : (
+                            renderFormattedMarkdown(msg.text)
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
                 )}
 
-                {isChatLoading && (
-                  <div className="flex gap-1.5 justify-start">
-                    <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0">
+                {/* Animated Thinking & Slicing Indicator */}
+                {(isLoading || isChatLoading) && (
+                  <div className="flex gap-2 justify-start animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0 mt-1">
                       <Sparkles className="w-3 h-3 animate-spin" />
                     </div>
-                    <div className="bg-zinc-900 border border-white/5 text-zinc-400 text-[11px] rounded-2xl rounded-bl-sm px-3 py-1.5 animate-pulse">
-                      Searching hybrid vector memory & thinking...
+                    <div className="bg-zinc-900 border border-purple-500/30 text-zinc-300 text-[11px] rounded-2xl rounded-bl-sm px-3.5 py-2 flex items-center gap-2 shadow-lg shadow-purple-950/40">
+                      <div className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+                      <span className="font-medium text-purple-200">
+                        {isLoading
+                          ? "Slicing tabs, isolating diagrams & reasoning..."
+                          : "Searching vector memory & formulating answer..."}
+                      </span>
                     </div>
                   </div>
                 )}
