@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { apiFetch } from "../utils/api";
 import {
   GitBranch,
   RefreshCw,
@@ -46,9 +47,8 @@ export default function KnowledgeGraphExplorer({ onSelectBranch }) {
   const fetchGraph = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:5001/graph");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiFetch("http://localhost:5001/graph");
+      if (data && data.nodes) {
         setGraphData(data);
         initializePhysics(data.nodes, data.links);
       }
@@ -89,9 +89,8 @@ export default function KnowledgeGraphExplorer({ onSelectBranch }) {
     setIsChainLoading(true);
 
     try {
-      const res = await fetch(`http://localhost:5001/graph/branch/${node.id}`);
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiFetch(`http://localhost:5001/graph/branch/${node.id}`);
+      if (data && data.chain) {
         setBranchChain(data.chain || []);
       }
     } catch (err) {
@@ -110,7 +109,7 @@ export default function KnowledgeGraphExplorer({ onSelectBranch }) {
     setIsBranchChatLoading(true);
 
     try {
-      const res = await fetch("http://localhost:5001/chat", {
+      const data = await apiFetch("http://localhost:5001/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -119,8 +118,7 @@ export default function KnowledgeGraphExplorer({ onSelectBranch }) {
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      if (data && data.ai_node_id) {
         // Refresh graph to show the newly sprouted branch node
         await fetchGraph();
         // Update current chain

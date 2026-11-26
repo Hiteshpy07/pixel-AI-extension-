@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import SelectionOverlay from "../SelectionOverlay";
 import MascotAvatar from "./MascotAvatar";
+import { apiFetch } from "../utils/api";
 import {
   Sparkles,
   Terminal,
@@ -76,8 +77,8 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch("http://localhost:5001/health");
-        setBackendStatus(res.ok);
+        const res = await apiFetch("http://localhost:5001/health");
+        setBackendStatus(!!res && (res.status === "online" || res.status === "ok"));
       } catch (err) {
         setBackendStatus(false);
       }
@@ -199,7 +200,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     setChatMessages((prev) => [...prev, userCaptureMsg]);
 
     try {
-      const response = await fetch("http://localhost:5001/capture", {
+      const data = await apiFetch("http://localhost:5001/capture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -208,12 +209,6 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           parent_node_id: activeNodeId,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
-      }
-
-      const data = await response.json();
 
       // Record screen metadata from backend
       setScreenMetadata({
@@ -238,7 +233,10 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
       fetchGraph();
     } catch (error) {
       console.error("Capture error:", error);
-      const errMsg = "⚠️ Could not reach Pixel backend on port 5001.\n\nPlease start the server:\n`cd pixel-be && python main.py`";
+      const isConnectionRefused = error.message?.includes("Failed to fetch") || error.message?.includes("NetworkError");
+      const errMsg = isConnectionRefused
+        ? "⚠️ Could not reach Pixel backend on port 5001.\n\nPlease start the server:\n`cd pixel-be && python main.py`"
+        : `⚠️ Error during analysis: ${error.message}`;
       setResultText(errMsg);
       setChatMessages((prev) => [
         ...prev,
@@ -262,7 +260,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     setActiveTab("chat");
 
     try {
-      const response = await fetch("http://localhost:5001/chat", {
+      const data = await apiFetch("http://localhost:5001/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -270,12 +268,6 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           parent_node_id: activeNodeId,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Chat error ${response.status}`);
-      }
-
-      const data = await response.json();
 
       // Chain the branch forward to the AI's reply node!
       if (data.ai_node_id) {
@@ -288,7 +280,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
       console.error("Chat error:", err);
       setChatMessages((prev) => [
         ...prev,
-        { role: "model", text: "⚠️ Error sending follow-up message. Is port 5001 running?" },
+        { role: "model", text: `⚠️ Error sending message: ${err.message}` },
       ]);
     } finally {
       setIsChatLoading(false);
@@ -301,9 +293,8 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
   const fetchGraph = async () => {
     setIsGraphLoading(true);
     try {
-      const res = await fetch("http://localhost:5001/graph");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiFetch("http://localhost:5001/graph");
+      if (data && data.nodes) {
         setGraphData(data);
       }
     } catch (e) {
@@ -315,10 +306,9 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
 
   const handleSelectBranch = async (nodeId) => {
     try {
-      const res = await fetch(`http://localhost:5001/graph/branch/${nodeId}`);
-      if (res.ok) {
-        const data = await res.json();
-        const chain = data.chain || [];
+      const data = await apiFetch(`http://localhost:5001/graph/branch/${nodeId}`);
+      if (data && data.chain) {
+        const chain = data.chain;
 
         // Convert ancestor chain into chat messages
         const reconstructedMessages = chain

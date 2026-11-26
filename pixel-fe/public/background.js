@@ -6,7 +6,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleCapture(sender.tab, message.cropData, sendResponse);
     return true; // Keep channel open for async sendResponse
   }
+  if (message.type === 'PIXEL_API_REQUEST') {
+    handleApiRequest(message.url, message.options, sendResponse);
+    return true; // Keep channel open for async sendResponse
+  }
 });
+
+async function handleApiRequest(url, options, sendResponse) {
+  try {
+    const res = await fetch(url, {
+      method: options?.method || 'GET',
+      headers: options?.headers || {},
+      body: options?.body,
+    });
+    const data = await res.json().catch(() => null);
+    sendResponse({
+      ok: res.ok,
+      status: res.status,
+      data: data,
+      error: res.ok ? null : (data?.detail || `Server returned ${res.status}`),
+    });
+  } catch (err) {
+    sendResponse({ ok: false, status: 0, error: err.message });
+  }
+}
 
 async function handleCapture(tab, cropData, sendResponse) {
   try {
