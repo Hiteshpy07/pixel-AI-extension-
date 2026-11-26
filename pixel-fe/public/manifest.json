@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Pixel AI - Floating Screen Assistant",
-  "version": "1.0.0",
-  "description": "Floating AI assistant in the bottom-left of every tab. Snip any code or UI and get instant AI explanations.",
+  "name": "Pixel AI - Screen Companion",
+  "version": "2.0.0",
+  "description": "Floating AI screen recorder, multimodal diagram extractor, and branching knowledge graph assistant.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -24,6 +24,27 @@
     }
   ],
   "action": {
-    "default_title": "Pixel AI Assistant"
+    "default_title": "Pixel AI Screen Companion",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "commands": {
+    "toggle-snip": {
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S"
+      },
+      "description": "Snip screen area with Pixel"
+    }
   }
 }

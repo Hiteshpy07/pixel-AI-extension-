@@ -82,7 +82,29 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-// When extension icon is clicked in toolbar, safely notify or inject into tab
+// When keyboard shortcut (Alt+S) is triggered globally in Chrome
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'toggle-snip') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !isInjectableUrl(tab?.url)) return;
+
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: 'PIXEL_START_SELECTION' });
+    } catch (err) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+        setTimeout(() => {
+          chrome.tabs.sendMessage(tab.id, { type: 'PIXEL_START_SELECTION' }).catch(() => {});
+        }, 150);
+      } catch (injectErr) {
+        console.warn('Could not inject content script on shortcut:', injectErr.message);
+      }
+    }
+  }
+});
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab?.id || !isInjectableUrl(tab?.url)) return;
 
