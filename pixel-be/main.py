@@ -319,8 +319,9 @@ class CaptureRequest(BaseModel):
 
 
 @app.get('/')
+@app.get('/health')
 def root():
-    'just health check on this route...'
+    'Health check route for frontend and extension'
     return {
         "status": "online",
         "app": "Pixel AI Brain",
@@ -538,5 +539,9 @@ def get_branch_history(node_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-        
+if __name__ == "__main__":
+    import uvicorn
+    print("🚀 Pixel AI Brain is live on http://localhost:5001")
+    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=True)
+
 
