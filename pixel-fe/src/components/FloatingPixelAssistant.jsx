@@ -4,61 +4,75 @@ import MascotAvatar from "./MascotAvatar";
 import {
   Sparkles,
   Terminal,
-  Cpu,
   Camera,
   MessageSquare,
   Send,
   X,
   Minus,
-  RotateCcw,
   Copy,
   Check,
-  Zap,
-  ChevronRight,
   Maximize2,
   Trash2,
-  AlertCircle,
-  HelpCircle,
-  Move
+  Folder,
+  Layers,
+  Share2,
+  RefreshCw,
+  GitBranch,
+  ArrowRight
 } from "lucide-react";
 
 export default function FloatingPixelAssistant({ isExtension = false }) {
-  // UI State
+  // ---------------------------------------------------------------------------
+  // 1. UI & Widget State
+  // ---------------------------------------------------------------------------
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [activeMode, setActiveMode] = useState("vision"); // "vision" | "code" | "ocr"
-  const [activeTab, setActiveTab] = useState("result"); // "result" | "chat"
+  const [activeTab, setActiveTab] = useState("analysis"); // "analysis" | "chat" | "graph"
   const [showOverlay, setShowOverlay] = useState(false);
   const [backendStatus, setBackendStatus] = useState(false);
 
-  // Content State
+  // ---------------------------------------------------------------------------
+  // 2. Data & Memory State
+  // ---------------------------------------------------------------------------
   const [selectedImage, setSelectedImage] = useState(null);
   const [imageDimensions, setImageDimensions] = useState(null);
   const [customPrompt, setCustomPrompt] = useState("");
   const [resultText, setResultText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [screenMetadata, setScreenMetadata] = useState(null); // { project, tabs, diagrams }
+  const [activeNodeId, setActiveNodeId] = useState(null); // Current branch parent node in SQLite
+
+  // Chat State
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
+
+  // Graph State
+  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
+  const [selectedGraphNode, setSelectedGraphNode] = useState(null);
+
+  // UI Utilities
   const [copiedCodeIndex, setCopiedCodeIndex] = useState(null);
   const [copiedAll, setCopiedAll] = useState(false);
 
-  // Derive Mascot State for dynamic animations ('idle' | 'thinking' | 'responding')
+  // Dynamic Avatar State
   const mascotState = isLoading
     ? "thinking"
-    : isStreaming || isChatLoading
+    : isChatLoading
     ? "responding"
     : "idle";
 
-  // Position & Drag State (Relative offset from bottom-left)
+  // ---------------------------------------------------------------------------
+  // 3. Dragging & Positioning State (Untouched Avatar Anchor)
+  // ---------------------------------------------------------------------------
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, hasMoved: false });
   const chatBottomRef = useRef(null);
   const popupRef = useRef(null);
 
-  // Check FastAPI backend health
+  // Health-check ping to FastAPI (http://localhost:5001/health)
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -73,7 +87,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Keyboard shortcut listener: Alt+S to trigger snip, Esc to close
+  // Keyboard shortcut listener: Alt+S to snip, Esc to close
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.altKey && (e.key === "s" || e.key === "S")) {
@@ -87,7 +101,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, showOverlay]);
 
-  // Chrome Extension message listener (toggle from toolbar, etc.)
+  // Chrome Extension message listener
   useEffect(() => {
     if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
       const handleRuntimeMessage = (message, sender, sendResponse) => {
@@ -101,24 +115,20 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
         }
         return true;
       };
-
       chrome.runtime.onMessage.addListener(handleRuntimeMessage);
-      return () => {
-        chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
-      };
+      return () => chrome.runtime.onMessage.removeListener(handleRuntimeMessage);
     }
   }, []);
 
-  // Auto-scroll chat to bottom
+  // Auto-scroll chat view
   useEffect(() => {
     if (activeTab === "chat") {
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [chatMessages, isChatLoading, activeTab]);
 
-  // Dragging logic for floating avatar
+  // Avatar dragging handlers
   const handleMouseDown = (e) => {
-    // Only drag from avatar or header drag handle
     setIsDragging(true);
     dragRef.current.startX = e.clientX - position.x;
     dragRef.current.startY = e.clientY - position.y;
@@ -129,16 +139,13 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     const handleMouseMove = (e) => {
       if (!isDragging) return;
       dragRef.current.hasMoved = true;
-      // Clamp within viewport
       const newX = e.clientX - dragRef.current.startX;
       const newY = e.clientY - dragRef.current.startY;
       setPosition({ x: newX, y: newY });
     };
 
     const handleMouseUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
-      }
+      if (isDragging) setIsDragging(false);
     };
 
     if (isDragging) {
@@ -151,7 +158,9 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     }
   }, [isDragging]);
 
-  // Handle screenshot crop received
+  // ---------------------------------------------------------------------------
+  // 4. Backend Ingestion & Analysis: POST /capture
+  // ---------------------------------------------------------------------------
   const handleImageReady = (rawBase64) => {
     const fullDataUrl = `data:image/png;base64,${rawBase64}`;
     setSelectedImage(fullDataUrl);
@@ -159,170 +168,164 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     setIsOpen(true);
     setIsMinimized(false);
 
-    // Get image dimensions for badge
     const img = new Image();
     img.onload = () => {
       setImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
     };
     img.src = fullDataUrl;
 
-    // Immediately trigger analysis
-    runAnalysis(fullDataUrl);
+    runCapture(fullDataUrl);
   };
 
-  // Run AI Analysis or OCR
-  const runAnalysis = async (imageData = selectedImage, promptOverride = null) => {
+  const runCapture = async (imageData = selectedImage, promptOverride = null) => {
     if (!imageData) return;
 
     setIsLoading(true);
-    setIsStreaming(true);
     setResultText("");
-    setActiveTab("result");
+    setActiveTab("analysis");
 
     const promptToSend =
       promptOverride ||
       customPrompt ||
-      (activeMode === "code"
-        ? "Convert this screenshot design or code into clean, modern, fully functional code (React + Tailwind CSS if UI). Explain key fixes and decisions."
-        : activeMode === "ocr"
-        ? "Extract all text verbatim with highest accuracy."
-        : "Analyze this screenshot in detail. Identify any UI components, data, code, or errors, and provide clear actionable insights and fixes.");
+      "Analyze this screen. Explain the code, diagnose any errors, and describe the diagrams.";
 
     try {
-      if (activeMode === "ocr") {
-        const response = await fetch("http://localhost:5001/ocr", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: imageData, with_ai_summary: true }),
-        });
-        const data = await response.json();
-        const output = data.summary
-          ? `### 📝 Extracted Text:\n\n${data.text}\n\n---\n### 🤖 AI Summary & Key Takeaways:\n${data.summary}`
-          : data.text || "No text detected in this selection.";
-        setResultText(output);
-        setChatMessages([{ role: "model", text: output }]);
-      } else {
-        // 1. Try smart-route /analyse route (maintry.py: Diagram detection + Secret Redaction)
-        let usedSmartRoute = false;
-        try {
-          const smartRes = await fetch("http://localhost:5001/analyse", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: imageData, prompt: promptToSend }),
-          });
-          if (smartRes.ok) {
-            const data = await smartRes.json();
-            const text = data.text || data.response || "Analysis completed.";
-            const routeInfo = data.route_chosen ? `> ⚡ **Route**: \`${data.route_chosen}\` ${data.is_diagram ? "(Visual Architecture)" : "(Local OCR + Privacy Shield)"}\n\n` : "";
-            setResultText(routeInfo + text);
-            setChatMessages([{ role: "model", text: text }]);
-            usedSmartRoute = true;
-          }
-        } catch (e) {
-          console.log("Falling back to stream-analyze:", e);
-        }
+      const response = await fetch("http://localhost:5001/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: imageData,
+          prompt: promptToSend,
+          parent_node_id: activeNodeId,
+        }),
+      });
 
-        if (!usedSmartRoute) {
-          const response = await fetch("http://localhost:5001/stream-analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: imageData,
-            prompt: promptToSend,
-            mode: activeMode,
-          }),
-        });
-
-        if (!response.body) throw new Error("No stream body");
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let accumulated = "";
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          accumulated += chunk;
-          setResultText(accumulated);
-        }
-
-        setChatMessages([{ role: "model", text: accumulated }]);
-        }
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
       }
+
+      const data = await response.json();
+
+      // Record screen metadata from backend
+      setScreenMetadata({
+        project: data.project || "General Workspace",
+        tabs: data.detected_tabs || [],
+        diagrams: data.diagrams_found || 0,
+      });
+
+      // Update current active branch node in SQLite graph
+      if (data.screen_node_id) {
+        setActiveNodeId(data.screen_node_id);
+      }
+
+      const reply = data.ai_response || "Screen analyzed, diagram contours extracted, and memory indexed in SQLite graph.";
+      setResultText(reply);
+      setChatMessages([{ role: "model", text: reply }]);
+
+      // Silently refresh graph memory in background
+      fetchGraph();
     } catch (error) {
-      console.error("Analysis error:", error);
+      console.error("Capture error:", error);
       setResultText(
-        "⚠️ Could not reach Pixel backend (port 5001).\n\nPlease make sure your FastAPI backend server is running:\n`python maintry.py` in pixel-be"
+        "⚠️ Could not reach Pixel backend on port 5001.\n\nPlease start the server:\n`cd pixel-be && python main.py`"
       );
     } finally {
       setIsLoading(false);
-      setIsStreaming(false);
     }
   };
 
-  // Follow-up chat send
+  // ---------------------------------------------------------------------------
+  // 5. Branching Follow-up Chat: POST /chat
+  // ---------------------------------------------------------------------------
   const handleSendChatMessage = async (msgText = chatInput) => {
     if (!msgText.trim() || isChatLoading) return;
 
     const userMsg = msgText.trim();
     setChatInput("");
-    const updatedMessages = [...chatMessages, { role: "user", text: userMsg }];
-    setChatMessages(updatedMessages);
+    setChatMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setIsChatLoading(true);
     setActiveTab("chat");
 
     try {
-      const history = updatedMessages.slice(1, -1);
       const response = await fetch("http://localhost:5001/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          history,
           message: userMsg,
-          analysis: resultText,
+          parent_node_id: activeNodeId,
         }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Chat error ${response.status}`);
+      }
+
       const data = await response.json();
-      setChatMessages((prev) => [...prev, { role: "model", text: data.text }]);
+
+      // Chain the branch forward to the AI's reply node!
+      if (data.ai_node_id) {
+        setActiveNodeId(data.ai_node_id);
+      }
+
+      setChatMessages((prev) => [...prev, { role: "model", text: data.reply }]);
+      fetchGraph();
     } catch (err) {
+      console.error("Chat error:", err);
       setChatMessages((prev) => [
         ...prev,
-        { role: "model", text: "⚠️ Error sending follow-up. Backend unreachable." },
+        { role: "model", text: "⚠️ Error sending follow-up message. Is port 5001 running?" },
       ]);
     } finally {
       setIsChatLoading(false);
     }
   };
 
-  // Quick suggestion prompts
-  const quickPrompts = {
-    code: [
-      { label: "💡 Explain & Fix Bug", prompt: "Explain the bug in this code snippet and provide the corrected code." },
-      { label: "⚡ Convert to TypeScript", prompt: "Convert this component or code into clean, typed TypeScript." },
-      { label: "🎨 Tailwind CSS", prompt: "Convert this UI design into clean React + Tailwind CSS code." },
-      { label: "🚀 Optimize Performance", prompt: "How can this code be optimized for performance and readability?" },
-    ],
-    vision: [
-      { label: "🔍 Explain What I See", prompt: "Describe all key elements and details shown in this screenshot." },
-      { label: "📝 Summarize Key Points", prompt: "Provide a 3-bullet-point executive summary of this image." },
-      { label: "🎨 Critique UI/UX", prompt: "Give a constructive UI/UX design review of this interface." },
-    ],
-    ocr: [
-      { label: "📋 Clean Up Text", prompt: "Clean up and format this extracted text with proper punctuation and structure." },
-      { label: "🤖 Key Entities & Data", prompt: "Extract all key numbers, dates, emails, and entities from this text." },
-    ],
+  // ---------------------------------------------------------------------------
+  // 6. Obsidian Knowledge Graph: GET /graph & GET /graph/branch/:id
+  // ---------------------------------------------------------------------------
+  const fetchGraph = async () => {
+    setIsGraphLoading(true);
+    try {
+      const res = await fetch("http://localhost:5001/graph");
+      if (res.ok) {
+        const data = await res.json();
+        setGraphData(data);
+      }
+    } catch (e) {
+      console.log("Graph fetch failed:", e);
+    } finally {
+      setIsGraphLoading(false);
+    }
   };
 
-  // Copy entire response
-  const handleCopyAll = () => {
-    if (!resultText) return;
-    navigator.clipboard.writeText(resultText);
-    setCopiedAll(true);
-    setTimeout(() => setCopiedAll(false), 2000);
+  const handleSelectBranch = async (nodeId) => {
+    try {
+      const res = await fetch(`http://localhost:5001/graph/branch/${nodeId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const chain = data.chain || [];
+
+        // Convert ancestor chain into chat messages
+        const reconstructedMessages = chain
+          .filter((n) => n.type === "chat_message")
+          .map((n) => ({
+            role: n.title.startsWith("User:") ? "user" : "model",
+            text: n.content,
+          }));
+
+        if (reconstructedMessages.length > 0) {
+          setChatMessages(reconstructedMessages);
+        }
+
+        setActiveNodeId(nodeId);
+        setActiveTab("chat");
+      }
+    } catch (e) {
+      console.error("Branch load error:", e);
+    }
   };
 
-  // Clear current context
+  // Reset current session
   const handleReset = () => {
     setSelectedImage(null);
     setImageDimensions(null);
@@ -330,12 +333,22 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     setChatMessages([]);
     setCustomPrompt("");
     setChatInput("");
+    setScreenMetadata(null);
+    setActiveNodeId(null);
+    setSelectedGraphNode(null);
   };
 
-  // Formatted markdown/code renderer
+  // Copy helpers
+  const handleCopyAll = () => {
+    if (!resultText) return;
+    navigator.clipboard.writeText(resultText);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+  };
+
+  // Markdown code renderer
   const renderFormattedMarkdown = (content) => {
     if (!content) return null;
-
     const parts = content.split(/(```[\s\S]*?```)/g);
 
     return parts.map((part, index) => {
@@ -388,7 +401,9 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
 
   return (
     <>
-      {/* Selection Overlay */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Selection Overlay for screen sniping                               */}
+      {/* ----------------------------------------------------------------- */}
       {showOverlay && (
         <SelectionOverlay
           onCaptured={() => setShowOverlay(false)}
@@ -396,7 +411,9 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
         />
       )}
 
-      {/* Main Floating Anchor - Positioned in Bottom-Left */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Floating Widget Anchor (Positioned Bottom-Left)                    */}
+      {/* ----------------------------------------------------------------- */}
       <div
         className="fixed bottom-6 left-6 z-[2147483640] select-none flex flex-col items-start gap-3 pointer-events-auto font-sans"
         style={{
@@ -404,14 +421,16 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           transition: isDragging ? "none" : "transform 0.1s ease",
         }}
       >
-        {/* EXPANDED POPUP CARD (Docked in Bottom-Left directly above avatar) */}
+        {/* --------------------------------------------------------------- */}
+        {/* EXPANDED POPUP CARD (Docked directly above avatar)               */}
+        {/* --------------------------------------------------------------- */}
         {isOpen && !isMinimized && (
           <div
             ref={popupRef}
-            className="w-[390px] h-[550px] max-h-[85vh] bg-zinc-950/95 border border-purple-500/30 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] flex flex-col backdrop-blur-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            className="w-[400px] h-[570px] max-h-[85vh] bg-zinc-950/95 border border-purple-500/30 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.85)] flex flex-col backdrop-blur-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            {/* Header with Drag Handle & Status */}
+            {/* Header: Mascot, Title & Status */}
             <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-950/70 via-zinc-900/90 to-indigo-950/70 border-b border-white/10">
               <div
                 className="flex items-center gap-2.5 cursor-move flex-1"
@@ -425,7 +444,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white tracking-wide">PIXEL AI</span>
+                    <span className="text-xs font-bold text-white tracking-wide">PIXEL BRAIN</span>
                     <span
                       className={`inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full font-mono font-medium border ${
                         backendStatus
@@ -434,18 +453,18 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                       }`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${backendStatus ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
-                      {backendStatus ? "Live" : "Offline"}
+                      {backendStatus ? "Live (5001)" : "Offline"}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Header Action Buttons */}
+              {/* Action Buttons */}
               <div className="flex items-center gap-1">
-                {selectedImage && (
+                {(selectedImage || resultText) && (
                   <button
                     onClick={handleReset}
-                    title="Reset / Clear image"
+                    title="Reset session"
                     className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors text-xs"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -453,14 +472,14 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 )}
                 <button
                   onClick={() => setIsMinimized(true)}
-                  title="Minimize popup"
+                  title="Minimize"
                   className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors text-xs"
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => setIsOpen(false)}
-                  title="Close popup"
+                  title="Close"
                   className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors text-xs"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -468,36 +487,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
               </div>
             </div>
 
-            {/* Mode Switcher Pills */}
-            <div className="px-3 pt-2.5 pb-2 bg-zinc-900/60 border-b border-white/5 flex gap-1.5">
-              {[
-                { id: "vision", label: "Vision", icon: Sparkles, color: "hover:text-purple-300" },
-                { id: "code", label: "Code", icon: Terminal, color: "hover:text-indigo-300" },
-                { id: "ocr", label: "OCR", icon: Cpu, color: "hover:text-emerald-300" },
-              ].map((m) => {
-                const Icon = m.icon;
-                const isActive = activeMode === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => {
-                      setActiveMode(m.id);
-                      if (selectedImage) runAnalysis(selectedImage);
-                    }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-semibold transition-all ${
-                      isActive
-                        ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
-                        : "bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Icon className="w-3 h-3" />
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Action Toolbar: Snip Screen Button & Image Badge */}
+            {/* Quick Snip Toolbar & Thumbnail */}
             <div className="p-3 bg-zinc-900/40 border-b border-white/5 flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <button
@@ -505,7 +495,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                   className="flex-1 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                 >
                   <Camera className="w-3.5 h-3.5" />
-                  <span>{selectedImage ? "Snip New Area" : "Snip Screen Area"}</span>
+                  <span>{selectedImage ? "Snip New Screen" : "Snip Screen Area"}</span>
                   <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded font-mono text-purple-200">
                     Alt+S
                   </span>
@@ -514,7 +504,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 {resultText && (
                   <button
                     onClick={handleCopyAll}
-                    title="Copy full analysis"
+                    title="Copy analysis text"
                     className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white p-2 rounded-xl text-xs transition-colors flex items-center justify-center border border-white/5"
                   >
                     {copiedAll ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -522,206 +512,250 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 )}
               </div>
 
-              {/* Active Image Thumbnail Pill */}
+              {/* Active Image Thumbnail & Detected Project Badge */}
               {selectedImage && (
                 <div className="flex items-center justify-between bg-zinc-900/80 border border-white/10 rounded-xl px-2.5 py-1.5">
                   <div className="flex items-center gap-2 overflow-hidden">
                     <img
                       src={selectedImage}
-                      alt="Crop Thumbnail"
+                      alt="Crop"
                       className="w-8 h-8 rounded-lg object-cover border border-purple-500/40 shrink-0"
                     />
                     <div className="flex flex-col overflow-hidden">
-                      <span className="text-[11px] font-semibold text-zinc-200 truncate">
-                        Active Crop
+                      <span className="text-[11px] font-semibold text-zinc-200 truncate flex items-center gap-1">
+                        <Folder className="w-3 h-3 text-purple-400 inline" />
+                        {screenMetadata?.project || "Analyzing..."}
                       </span>
                       {imageDimensions && (
                         <span className="text-[9.5px] font-mono text-zinc-400">
                           {imageDimensions.width} × {imageDimensions.height} px
+                          {screenMetadata?.diagrams > 0 && ` • ${screenMetadata.diagrams} diagrams`}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => runAnalysis(selectedImage)}
-                      disabled={isLoading}
-                      className="text-[10px] bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white px-2 py-1 rounded-lg transition-colors font-medium"
-                    >
-                      Re-run
-                    </button>
-                    <button
-                      onClick={() => setSelectedImage(null)}
-                      className="text-zinc-500 hover:text-zinc-300 p-1 rounded transition-colors"
-                      title="Remove image"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => runCapture(selectedImage)}
+                    disabled={isLoading}
+                    className="text-[10px] bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white px-2 py-1 rounded-lg transition-colors font-medium"
+                  >
+                    Re-run
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Custom Instruction Input (Optional override) */}
-            <div className="px-3 py-1.5 bg-zinc-950/40 border-b border-white/5 flex gap-2">
-              <input
-                type="text"
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runAnalysis()}
-                placeholder={
-                  activeMode === "code"
-                    ? "Custom: e.g. convert to TS with Tailwind"
-                    : activeMode === "ocr"
-                    ? "Custom: e.g. only numbers and tables"
-                    : "Custom: e.g. what is causing error in line 4?"
-                }
-                className="flex-1 text-[11px] bg-zinc-900/80 border border-white/5 rounded-lg px-2.5 py-1 text-white outline-none focus:border-purple-500 transition-colors placeholder:text-zinc-600"
-              />
+            {/* Clean 3 Navigation Tabs */}
+            <div className="flex border-b border-white/5 bg-zinc-900/50 px-2 text-xs">
               <button
-                disabled={isLoading || !selectedImage}
-                onClick={() => runAnalysis()}
-                className="px-2.5 py-1 bg-zinc-800 hover:bg-purple-600 disabled:opacity-40 text-white rounded-lg text-[10px] font-semibold transition-all flex items-center gap-1"
-              >
-                Run
-              </button>
-            </div>
-
-            {/* View Tabs: Result View vs Interactive Chat */}
-            <div className="flex border-b border-white/5 bg-zinc-900/30 px-3 text-xs">
-              <button
-                onClick={() => setActiveTab("result")}
-                className={`py-2 px-3 text-[11px] font-semibold border-b-2 flex items-center gap-1.5 transition-all ${
-                  activeTab === "result"
+                onClick={() => setActiveTab("analysis")}
+                className={`flex-1 py-2 text-[11px] font-semibold border-b-2 flex items-center justify-center gap-1.5 transition-all ${
+                  activeTab === "analysis"
                     ? "border-purple-500 text-white"
                     : "border-transparent text-zinc-400 hover:text-zinc-300"
                 }`}
               >
-                <Sparkles className="w-3 h-3 text-purple-400" />
-                Response
-                {isStreaming && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
-                )}
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                Analysis
               </button>
 
               <button
                 onClick={() => setActiveTab("chat")}
-                className={`py-2 px-3 text-[11px] font-semibold border-b-2 flex items-center gap-1.5 transition-all ${
+                className={`flex-1 py-2 text-[11px] font-semibold border-b-2 flex items-center justify-center gap-1.5 transition-all ${
                   activeTab === "chat"
                     ? "border-indigo-500 text-white"
                     : "border-transparent text-zinc-400 hover:text-zinc-300"
                 }`}
               >
-                <MessageSquare className="w-3 h-3 text-indigo-400" />
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
                 Chat ({chatMessages.length})
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("graph");
+                  fetchGraph();
+                }}
+                className={`flex-1 py-2 text-[11px] font-semibold border-b-2 flex items-center justify-center gap-1.5 transition-all ${
+                  activeTab === "graph"
+                    ? "border-emerald-500 text-white"
+                    : "border-transparent text-zinc-400 hover:text-zinc-300"
+                }`}
+              >
+                <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                Graph ({graphData.nodes?.length || 0})
               </button>
             </div>
 
-            {/* Main Content Area (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-3 text-xs flex flex-col gap-2.5">
-              {activeTab === "result" ? (
-                <>
-                  {/* Results or Empty State */}
-                  {resultText ? (
-                    <div className="flex flex-col gap-2">
-                      {renderFormattedMarkdown(resultText)}
-                      {isStreaming && (
-                        <div className="flex items-center gap-2 text-[11px] text-purple-400 animate-pulse mt-1">
-                          <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
-                          <span>Streaming tokens from Gemini...</span>
+            {/* ------------------------------------------------------------- */}
+            {/* TAB 1: ANALYSIS                                               */}
+            {/* ------------------------------------------------------------- */}
+            {activeTab === "analysis" && (
+              <div className="flex-1 overflow-y-auto p-3 text-xs flex flex-col gap-2.5">
+                {/* Detected Tabs Chips */}
+                {screenMetadata?.tabs?.length > 0 && (
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[10px] text-zinc-400">
+                    <span className="text-zinc-500 uppercase font-bold shrink-0">Tabs:</span>
+                    {screenMetadata.tabs.slice(0, 3).map((tab, idx) => (
+                      <span
+                        key={idx}
+                        className="bg-zinc-900 border border-white/5 px-2 py-0.5 rounded-md text-purple-300 truncate max-w-[120px]"
+                      >
+                        {tab}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Analysis Response */}
+                {resultText ? (
+                  <div className="flex flex-col gap-2">
+                    {renderFormattedMarkdown(resultText)}
+                  </div>
+                ) : isLoading ? (
+                  <div className="h-48 flex flex-col items-center justify-center text-center gap-2.5 text-zinc-400">
+                    <div className="w-8 h-8 rounded-full border-2 border-purple-500/30 border-t-purple-500 animate-spin" />
+                    <span className="text-xs font-medium text-purple-300">
+                      Slicing tabs, detecting diagrams & reasoning...
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-48 flex flex-col items-center justify-center text-center gap-2 text-zinc-500 p-4">
+                    <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center text-purple-400 mb-1">
+                      <Camera className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <p className="text-xs font-semibold text-zinc-300">No screen area captured yet</p>
+                    <p className="text-[11px] text-zinc-500 max-w-[240px]">
+                      Press <kbd className="px-1 py-0.5 bg-zinc-900 border border-white/10 rounded font-mono text-zinc-300 text-[10px]">Alt+S</kbd> to snip any code, error, or architecture diagram.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* TAB 2: BRANCH CHAT                                            */}
+            {/* ------------------------------------------------------------- */}
+            {activeTab === "chat" && (
+              <div className="flex-1 overflow-y-auto p-3 text-xs flex flex-col gap-2.5">
+                {chatMessages.length === 0 ? (
+                  <div className="h-48 flex flex-col items-center justify-center text-zinc-500 text-center gap-2">
+                    <MessageSquare className="w-6 h-6 text-zinc-600" />
+                    <p className="text-[11px]">Ask follow-up questions about this screen or project!</p>
+                  </div>
+                ) : (
+                  chatMessages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex gap-1.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                    >
+                      {msg.role !== "user" && (
+                        <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <Sparkles className="w-3 h-3" />
                         </div>
                       )}
-                    </div>
-                  ) : isLoading ? (
-                    <div className="h-44 flex flex-col items-center justify-center text-center gap-2.5 text-zinc-400">
-                      <div className="w-8 h-8 rounded-full border-2 border-purple-500/30 border-t-purple-500 animate-spin" />
-                      <span className="text-xs font-medium text-purple-300">
-                        {activeMode === "ocr" ? "Extracting text with EasyOCR..." : "Analyzing screen area with Gemini..."}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="h-44 flex flex-col items-center justify-center text-center gap-2 text-zinc-500 p-4">
-                      <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center text-purple-400 mb-1">
-                        <Camera className="w-5 h-5 text-purple-400" />
-                      </div>
-                      <p className="text-xs font-semibold text-zinc-300">
-                        No screen area selected
-                      </p>
-                      <p className="text-[11px] text-zinc-500 max-w-[240px]">
-                        Click <span className="text-purple-300 font-semibold">"Snip Screen Area"</span> or press <kbd className="px-1 py-0.5 bg-zinc-900 border border-white/10 rounded font-mono text-zinc-300 text-[10px]">Alt+S</kbd> to analyze anything on your screen.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Follow-up Quick Chips */}
-                  {resultText && !isStreaming && (
-                    <div className="mt-3 pt-2.5 border-t border-white/5 flex flex-col gap-1.5">
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                        Quick Follow-ups:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(quickPrompts[activeMode] || []).map((chip, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSendChatMessage(chip.prompt)}
-                            className="text-[10px] bg-zinc-900 hover:bg-purple-600/30 hover:border-purple-500/40 border border-white/5 text-zinc-300 hover:text-white px-2.5 py-1 rounded-lg transition-all text-left"
-                          >
-                            {chip.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                /* Chat Tab View */
-                <div className="flex flex-col gap-2.5">
-                  {chatMessages.length === 0 ? (
-                    <div className="h-44 flex flex-col items-center justify-center text-zinc-500 text-center gap-2">
-                      <MessageSquare className="w-6 h-6 text-zinc-600" />
-                      <p className="text-[11px]">Ask any follow-up questions about this screen!</p>
-                    </div>
-                  ) : (
-                    chatMessages.map((msg, idx) => (
                       <div
-                        key={idx}
-                        className={`flex gap-1.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                        className={`max-w-[85%] text-xs rounded-2xl px-3 py-2 leading-relaxed whitespace-pre-wrap shadow-sm ${
+                          msg.role === "user"
+                            ? "bg-purple-600 text-white rounded-br-sm"
+                            : "bg-zinc-900 border border-white/10 text-zinc-200 rounded-bl-sm"
+                        }`}
                       >
-                        {msg.role !== "user" && (
-                          <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
-                            <Sparkles className="w-3 h-3" />
-                          </div>
-                        )}
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {isChatLoading && (
+                  <div className="flex gap-1.5 justify-start">
+                    <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-3 h-3 animate-spin" />
+                    </div>
+                    <div className="bg-zinc-900 border border-white/5 text-zinc-400 text-[11px] rounded-2xl rounded-bl-sm px-3 py-1.5 animate-pulse">
+                      Searching hybrid vector memory & thinking...
+                    </div>
+                  </div>
+                )}
+                <div ref={chatBottomRef} />
+              </div>
+            )}
+
+            {/* ------------------------------------------------------------- */}
+            {/* TAB 3: OBSIDIAN KNOWLEDGE GRAPH VIEW                          */}
+            {/* ------------------------------------------------------------- */}
+            {activeTab === "graph" && (
+              <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[11px] text-zinc-400 pb-1 border-b border-white/5">
+                  <span className="font-semibold text-zinc-300 flex items-center gap-1">
+                    <GitBranch className="w-3 h-3 text-emerald-400" />
+                    Obsidian Knowledge Graph
+                  </span>
+                  <button
+                    onClick={fetchGraph}
+                    title="Refresh graph"
+                    className="p-1 hover:text-white transition-colors"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isGraphLoading ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+
+                {graphData.nodes?.length === 0 ? (
+                  <div className="h-44 flex flex-col items-center justify-center text-center text-zinc-500 gap-2">
+                    <Share2 className="w-6 h-6 text-zinc-600" />
+                    <p className="text-[11px]">No graph memory recorded yet. Snip a screen to build your tree!</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {graphData.nodes.map((n) => {
+                      const isCurrent = n.id === activeNodeId;
+                      const typeBadge =
+                        n.type === "project"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                          : n.type === "screen"
+                          ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                          : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+
+                      return (
                         <div
-                          className={`max-w-[85%] text-xs rounded-2xl px-3 py-2 leading-relaxed whitespace-pre-wrap shadow-sm ${
-                            msg.role === "user"
-                              ? "bg-purple-600 text-white rounded-br-sm"
-                              : "bg-zinc-900 border border-white/10 text-zinc-200 rounded-bl-sm"
+                          key={n.id}
+                          onClick={() => handleSelectBranch(n.id)}
+                          className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
+                            isCurrent
+                              ? "bg-purple-950/40 border-purple-500/60 shadow-md shadow-purple-500/10"
+                              : "bg-zinc-900/60 border-white/5 hover:border-white/20 hover:bg-zinc-900"
                           }`}
                         >
-                          {msg.text}
+                          <div className="flex flex-col overflow-hidden max-w-[280px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${typeBadge}`}>
+                                {n.type}
+                              </span>
+                              <span className="text-[11px] font-semibold text-zinc-200 truncate">
+                                {n.name}
+                              </span>
+                            </div>
+                            {n.content && (
+                              <span className="text-[10px] text-zinc-500 truncate mt-0.5 font-sans">
+                                {n.content.slice(0, 60)}...
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-[9.5px] text-zinc-400">Load</span>
+                            <ArrowRight className="w-3 h-3 text-purple-400" />
+                          </div>
                         </div>
-                      </div>
-                    ))
-                  )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
-                  {isChatLoading && (
-                    <div className="flex gap-1.5 justify-start">
-                      <div className="w-5 h-5 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center shrink-0">
-                        <Sparkles className="w-3 h-3 animate-spin" />
-                      </div>
-                      <div className="bg-zinc-900 border border-white/5 text-zinc-400 text-[11px] rounded-2xl rounded-bl-sm px-3 py-1.5 animate-pulse">
-                        Pixel is thinking...
-                      </div>
-                    </div>
-                  )}
-                  <div ref={chatBottomRef} />
-                </div>
-              )}
-            </div>
-
-            {/* Bottom Follow-up Input Bar */}
+            {/* Bottom Follow-up Input Bar (Visible on all tabs) */}
             <div className="p-2.5 bg-zinc-900/90 border-t border-white/10 flex gap-2">
               <input
                 type="text"
@@ -742,19 +776,23 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           </div>
         )}
 
-        {/* MINIMIZED PILL (If user clicked minimize) */}
+        {/* --------------------------------------------------------------- */}
+        {/* MINIMIZED PILL                                                  */}
+        {/* --------------------------------------------------------------- */}
         {isOpen && isMinimized && (
           <div
             onClick={() => setIsMinimized(false)}
             className="bg-zinc-900/90 hover:bg-zinc-800 border border-purple-500/40 rounded-2xl px-3.5 py-2 shadow-2xl backdrop-blur-xl flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
           >
             <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-            <span className="text-xs font-bold text-white">Pixel Assistant</span>
+            <span className="text-xs font-bold text-white">Pixel Brain</span>
             <Maximize2 className="w-3.5 h-3.5 text-zinc-400 ml-1" />
           </div>
         )}
 
-        {/* FLOATING AVATAR TRIGGER (Bottom-Left) */}
+        {/* --------------------------------------------------------------- */}
+        {/* FLOATING AVATAR TRIGGER (Bottom-Left - Preserved as-is)          */}
+        {/* --------------------------------------------------------------- */}
         <div
           className="relative group cursor-pointer"
           onMouseDown={handleMouseDown}
@@ -781,7 +819,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
             <div className="w-full h-full bg-gradient-to-br from-amber-200 via-amber-300 to-amber-400 rounded-[10px] flex items-center justify-center relative overflow-hidden border border-amber-300/60 shadow-inner">
               <MascotAvatar state={mascotState} className="w-full h-full" />
 
-              {/* Quick Instant Snip Camera Trigger */}
+              {/* Instant Camera Snip Trigger */}
               {!isOpen && (
                 <button
                   onClick={(e) => {
@@ -803,7 +841,6 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 title={backendStatus ? "Backend Connected (port 5001)" : "Backend Offline"}
               />
 
-              {/* Subtle hover highlight */}
               <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             </div>
           </div>
@@ -811,7 +848,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
           {/* Tooltip on Hover when Closed */}
           {!isOpen && (
             <div className="absolute left-13 top-1/2 -translate-y-1/2 bg-zinc-900 border border-white/10 text-white text-[11px] font-medium px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none flex items-center gap-1.5">
-              <span>Pixel AI Assistant</span>
+              <span>Pixel AI Brain</span>
               <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">
                 Click
               </span>
