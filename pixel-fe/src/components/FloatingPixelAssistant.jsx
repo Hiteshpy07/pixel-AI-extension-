@@ -88,18 +88,86 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Keyboard shortcut listener: Alt+S to snip, Esc to close
+  // Keyboard shortcut listener: Space + P to snip, Esc to close
+  const keysPressed = useRef(new Set());
+
   useEffect(() => {
+    const isInputElement = (target) => {
+      if (!target) return false;
+      const tagName = target.tagName?.toLowerCase();
+      return (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        target.isContentEditable ||
+        Boolean(target.closest?.("[contenteditable='true']"))
+      );
+    };
+
     const handleKeyDown = (e) => {
-      if (e.altKey && (e.key === "s" || e.key === "S")) {
+      if (e.key === "Escape" && isOpen && !showOverlay) {
+        setIsOpen(false);
+        return;
+      }
+
+      // Do not intercept keystrokes while the user is actively typing in text fields
+      if (isInputElement(e.target)) {
+        return;
+      }
+
+      const code = e.code;
+      const key = e.key ? e.key.toLowerCase() : "";
+
+      if (code === "Space" || key === " ") {
+        keysPressed.current.add("Space");
+      }
+      if (code === "KeyP" || key === "p") {
+        keysPressed.current.add("KeyP");
+      }
+
+      // Trigger if both Space and P are held together
+      const hasSpace = keysPressed.current.has("Space");
+      const hasP = keysPressed.current.has("KeyP");
+
+      if (hasSpace && hasP) {
+        e.preventDefault();
+        keysPressed.current.clear();
+        setShowOverlay(true);
+        return;
+      }
+
+      // Fallback support for Alt+S or Alt+P
+      if (e.altKey && (key === "s" || key === "p")) {
         e.preventDefault();
         setShowOverlay(true);
-      } else if (e.key === "Escape" && isOpen && !showOverlay) {
-        setIsOpen(false);
       }
     };
+
+    const handleKeyUp = (e) => {
+      const code = e.code;
+      const key = e.key ? e.key.toLowerCase() : "";
+
+      if (code === "Space" || key === " ") {
+        keysPressed.current.delete("Space");
+      }
+      if (code === "KeyP" || key === "p") {
+        keysPressed.current.delete("KeyP");
+      }
+    };
+
+    const handleBlur = () => {
+      keysPressed.current.clear();
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
   }, [isOpen, showOverlay]);
 
   // Chrome Extension message listener
@@ -133,13 +201,19 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
     setIsDragging(true);
     dragRef.current.startX = e.clientX - position.x;
     dragRef.current.startY = e.clientY - position.y;
+    dragRef.current.origX = e.clientX;
+    dragRef.current.origY = e.clientY;
     dragRef.current.hasMoved = false;
   };
 
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isDragging) return;
-      dragRef.current.hasMoved = true;
+      const dx = Math.abs(e.clientX - (dragRef.current.origX ?? e.clientX));
+      const dy = Math.abs(e.clientY - (dragRef.current.origY ?? e.clientY));
+      if (dx > 4 || dy > 4) {
+        dragRef.current.hasMoved = true;
+      }
       const newX = e.clientX - dragRef.current.startX;
       const newY = e.clientY - dragRef.current.startY;
       setPosition({ x: newX, y: newY });
@@ -442,7 +516,14 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 onMouseDown={handleMouseDown}
                 title="Drag to reposition widget"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 via-orange-400 to-amber-500 p-0.5 shadow-md shadow-amber-500/25 shrink-0">
+                <div
+                  className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 via-orange-400 to-amber-500 p-0.5 shadow-md shadow-amber-500/25 shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowOverlay(true);
+                  }}
+                  title="Click to Snip Screen Area (Space + P)"
+                >
                   <div className="w-full h-full bg-gradient-to-br from-amber-200 via-amber-300 to-amber-400 rounded-[10px] flex items-center justify-center overflow-hidden border border-amber-300/60 shadow-inner">
                     <MascotAvatar state={mascotState} className="w-full h-full" />
                   </div>
@@ -502,7 +583,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                   <Camera className="w-3.5 h-3.5" />
                   <span>{selectedImage ? "Snip New Screen" : "Snip Screen Area"}</span>
                   <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded font-mono text-purple-200">
-                    Alt+S
+                    Space+P
                   </span>
                 </button>
 
@@ -632,7 +713,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                     </div>
                     <p className="text-xs font-semibold text-zinc-300">No screen area captured yet</p>
                     <p className="text-[11px] text-zinc-500 max-w-[240px]">
-                      Press <kbd className="px-1 py-0.5 bg-zinc-900 border border-white/10 rounded font-mono text-zinc-300 text-[10px]">Alt+S</kbd> to snip any code, error, or architecture diagram.
+                      Press <kbd className="px-1 py-0.5 bg-zinc-900 border border-white/10 rounded font-mono text-zinc-300 text-[10px]">Space + P</kbd> to snip any code, error, or architecture diagram.
                     </p>
                   </div>
                 )}
@@ -647,7 +728,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                 {chatMessages.length === 0 ? (
                   <div className="h-48 flex flex-col items-center justify-center text-zinc-500 text-center gap-2">
                     <MessageSquare className="w-6 h-6 text-zinc-600" />
-                    <p className="text-[11px]">Snip any screen area (Alt+S) or ask Pixel a question!</p>
+                    <p className="text-[11px]">Snip any screen area (Space + P) or ask Pixel a question!</p>
                   </div>
                 ) : (
                   chatMessages.map((msg, idx) => (
@@ -827,17 +908,23 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
         )}
 
         {/* --------------------------------------------------------------- */}
-        {/* FLOATING AVATAR TRIGGER (Bottom-Left - Preserved as-is)          */}
+        {/* FLOATING AVATAR TRIGGER (Bottom-Left)                            */}
         {/* --------------------------------------------------------------- */}
         <div
           className="relative group cursor-pointer"
           onMouseDown={handleMouseDown}
           onClick={() => {
             if (!dragRef.current.hasMoved) {
-              setIsOpen((prev) => !prev);
-              setIsMinimized(false);
+              setShowOverlay(true);
             }
           }}
+          onContextMenu={(e) => {
+            // Right-click provides secondary access to toggle assistant panel
+            e.preventDefault();
+            setIsOpen((prev) => !prev);
+            setIsMinimized(false);
+          }}
+          title="Click to Snip Screen Area (Space + P)"
         >
           {/* Ambient Glow */}
           <div className="absolute -inset-1 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 opacity-40 blur-md group-hover:opacity-80 transition-opacity duration-300 animate-pulse" />
@@ -848,7 +935,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
               relative w-10 h-10 rounded-xl
               bg-gradient-to-tr from-amber-400 via-orange-400 to-amber-500
               p-0.5 shadow-xl shadow-amber-500/25 flex items-center justify-center
-              ${isDragging ? "cursor-grabbing scale-105" : "hover:scale-110 cursor-pointer"}
+              ${isDragging ? "cursor-grabbing scale-105" : "hover:scale-110 active:scale-95 cursor-pointer"}
               transition-all duration-200
             `}
           >
@@ -862,7 +949,7 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
                     e.stopPropagation();
                     setShowOverlay(true);
                   }}
-                  title="Snip Screen Area (Alt+S)"
+                  title="Snip Screen Area (Space + P)"
                   className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/50 flex items-center justify-center hover:scale-125 active:scale-95 transition-all z-20 border border-white/20"
                 >
                   <Camera className="w-2.5 h-2.5" />
@@ -883,10 +970,11 @@ export default function FloatingPixelAssistant({ isExtension = false }) {
 
           {/* Tooltip on Hover when Closed */}
           {!isOpen && (
-            <div className="absolute left-13 top-1/2 -translate-y-1/2 bg-zinc-900 border border-white/10 text-white text-[11px] font-medium px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none flex items-center gap-1.5">
-              <span>Pixel AI Brain</span>
-              <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">
-                Click
+            <div className="absolute left-13 top-1/2 -translate-y-1/2 bg-zinc-900 border border-white/10 text-white text-[11px] font-medium px-3 py-1.5 rounded-xl shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none flex items-center gap-2">
+              <Camera className="w-3.5 h-3.5 text-purple-400" />
+              <span>Snip Screen Area</span>
+              <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded font-mono font-semibold">
+                Space + P
               </span>
             </div>
           )}

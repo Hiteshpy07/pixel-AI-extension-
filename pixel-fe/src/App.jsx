@@ -96,7 +96,7 @@ export async function authenticateUser(token: string) {
             <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-500/20 text-xs text-purple-300 flex items-start gap-3">
               <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="font-semibold text-purple-200">How to test:</strong> Look at the <strong>bottom-left</strong> of your screen! Click the glowing Pixel avatar (or press <kbd className="px-1.5 py-0.5 bg-zinc-900 rounded font-mono text-white text-[10px]">Alt+S</kbd>), snip this code block, and Pixel will instantly stream the bug explanation and fixed TypeScript code into the popup!
+                <strong className="font-semibold text-purple-200">How to test:</strong> Look at the <strong>bottom-left</strong> of your screen! Click the glowing Pixel avatar (or press <kbd className="px-1.5 py-0.5 bg-zinc-900 rounded font-mono text-white text-[10px]">Space + P</kbd>), snip this code block, and Pixel will instantly stream the bug explanation and fixed TypeScript code into the popup!
               </div>
             </div>
           </div>

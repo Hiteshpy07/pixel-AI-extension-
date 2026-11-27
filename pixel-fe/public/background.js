@@ -105,7 +105,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-// When keyboard shortcut (Alt+S) is triggered globally in Chrome
+// When keyboard shortcut is triggered globally in Chrome
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === 'toggle-snip') {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

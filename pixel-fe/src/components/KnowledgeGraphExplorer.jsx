@@ -263,7 +263,7 @@ export default function KnowledgeGraphExplorer({ onSelectBranch }) {
               <Layers className="w-10 h-10 text-zinc-600 animate-pulse" />
               <p className="text-sm font-semibold text-zinc-400">No Graph Memory Detected</p>
               <p className="text-xs max-w-sm text-zinc-500">
-                Snip a screen with the floating avatar or Alt+S. Pixel will automatically bisect tabs, extract diagrams, and plant nodes here in SQLite!
+                Snip a screen with the floating avatar or Space + P. Pixel will automatically bisect tabs, extract diagrams, and plant nodes here in SQLite!
               </p>
             </div>
           ) : (
